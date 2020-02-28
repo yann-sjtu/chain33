@@ -2,6 +2,7 @@ package p2pnext
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/libp2p/go-libp2p-core/peerstore"
@@ -34,6 +35,14 @@ func (d *Discovery) FindPeers(ctx context.Context, host host.Host, seeds []strin
 	if err = d.KademliaDHT.Bootstrap(ctx); err != nil {
 		panic(err)
 	}
+	go func() {
+		for {
+			fmt.Println("routing table peers:", d.KademliaDHT.RoutingTable().ListPeers())
+			fmt.Println("peer store peers:", d.KademliaDHT.Host().Peerstore().Peers())
+			fmt.Println("addr book peers:", d.KademliaDHT.Host().Peerstore().PeersWithAddrs())
+			time.Sleep(time.Second * 3)
+		}
+	}()
 
 	for _, seed := range seeds {
 		addr, _ := multiaddr.NewMultiaddr(seed)
