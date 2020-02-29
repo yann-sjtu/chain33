@@ -23,13 +23,13 @@ import (
 )
 
 var (
-	log = log15.New("module", "p2p.download")
+	log             = log15.New("module", "p2p.download")
+	MaxJobLimit int = 100
 )
 
 func init() {
 	prototypes.RegisterProtocolType(protoTypeID, &DownloadProtol{})
-	var downloadHandler = new(DownloadHander)
-	prototypes.RegisterStreamHandlerType(protoTypeID, DownloadBlockReq, downloadHandler)
+	prototypes.RegisterStreamHandlerType(protoTypeID, DownloadBlockReq, &DownloadHander{})
 }
 
 const (
@@ -48,6 +48,7 @@ func (d *DownloadProtol) InitProtocol(data *prototypes.GlobalData) {
 	d.GlobalData = data
 	//注册事件处理函数
 	prototypes.RegisterEventHandler(types.EventFetchBlocks, d.handleEvent)
+
 }
 
 type DownloadHander struct {
@@ -120,15 +121,13 @@ func (d *DownloadProtol) OnReq(id string, message *types.P2PGetBlocks, s core.St
 	blocksResp := &types.MessageGetBlocksResp{MessageData: d.NewMessageCommon(id, peerID.Pretty(), pubkey, false),
 		Message: &types.InvDatas{Items: p2pInvData}}
 
-	log.Info("OnReq", "blocksResp BlockHeight+++++++", blocksResp.Message.GetItems()[0].GetBlock().GetHeight())
 	err = d.SendProtoMessage(blocksResp, s)
 	if err != nil {
 		log.Error("SendProtoMessage", "err", err)
-		//d.GetConnsManager().Delete(s.Conn().RemotePeer().Pretty())
 		return
 	}
 
-	log.Info("%s:  send block response to %s sent.", s.Conn().LocalPeer().String(), s.Conn().RemotePeer().String())
+	log.Info("OnReq", "blocksResp BlockHeight+++++++", blocksResp.Message.GetItems()[0].GetBlock().GetHeight(), "send block response to", s.Conn().RemotePeer().String())
 
 }
 
@@ -173,7 +172,6 @@ func (d *DownloadProtol) handleEvent(msg *queue.Message) {
 	}
 	wg.Wait()
 	log.Info("handleEvent", "download process done", "cost time(ms)", (time.Now().UnixNano()-startTime)/1e6)
-	//}
 
 }
 
@@ -202,16 +200,12 @@ ReDownload:
 	stream, err := d.SendToStream(freeJob.Pid.Pretty(), blockReq, DownloadBlockReq, d.GetHost())
 	if err != nil {
 		log.Error("NewStream", "err", err, "remotePid", freeJob.Pid)
-		//Reconnect
-		if err.Error() == "dial backoff" {
-			d.GetConnsManager().Delete(freeJob.Pid)
-		}
+		d.GetConnsManager().Delete(freeJob.Pid.Pretty())
 		d.releaseJob(freeJob)
 		goto ReDownload
 	}
 	defer stream.Close()
 
-	log.Info("handleEvent", "sendOk", "beforRead")
 	var resp types.MessageGetBlocksResp
 	err = d.ReadProtoMessage(&resp, stream)
 	if err != nil {
@@ -226,7 +220,7 @@ ReDownload:
 
 	//rate := float64(block.Size()) / float64(costTime)
 
-	log.Info("download+++++", "to", remotePid, "blockheight", block.GetHeight(),
+	log.Info("download+++++", "from", remotePid, "blockheight", block.GetHeight(),
 		"blockSize (bytes)", block.Size(), "costTime ms", costTime)
 
 	client := d.GetQueueClient()
@@ -237,11 +231,10 @@ ReDownload:
 }
 
 type JobPeerId struct {
-	Limit int
-	Pid   peer.ID
-	Rate  []float64 //max 128
-	mtx   sync.Mutex
-	rmtx  sync.Mutex
+	Limit   int
+	Pid     peer.ID
+	Latency time.Duration
+	mtx     sync.Mutex
 }
 
 // jobs datastruct
@@ -254,7 +247,7 @@ func (i jobs) Len() int {
 
 //Less Sort from low to high
 func (i jobs) Less(a, b int) bool {
-	return i[a].Limit < i[b].Limit
+	return i[a].Latency < i[b].Latency
 }
 
 //Swap  the param
@@ -285,13 +278,23 @@ func (d *DownloadProtol) initJob() jobs {
 }
 
 func (d *DownloadProtol) getFreeJob(js jobs) *JobPeerId {
-	var MaxJobLimit int = 100
+	//配置各个节点的速率
+	var peerIDs []peer.ID
+	for _, job := range js {
+		peerIDs = append(peerIDs, job.Pid)
+	}
+	latency := d.GetConnsManager().GetLatencyByPeer(peerIDs)
+	for _, jb := range js {
+		jb.Latency = latency[jb.Pid.Pretty()]
+	}
 	sort.Sort(js)
+	log.Info("show sort result", "sort of jobs", js)
 	for _, job := range js {
 		if job.Limit < MaxJobLimit {
 			job.mtx.Lock()
 			job.Limit++
 			job.mtx.Unlock()
+			log.Info("getFreeJob", " limit", job.Limit, "latency", job.Latency, "peerid", job.Pid)
 			return job
 		}
 	}

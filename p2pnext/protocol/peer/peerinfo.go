@@ -34,9 +34,8 @@ var log = log15.New("module", "p2p.peer")
 
 func init() {
 	prototypes.RegisterProtocolType(protoTypeID, &PeerInfoProtol{})
-	var hander = new(PeerInfoHandler)
-	prototypes.RegisterStreamHandlerType(protoTypeID, PeerInfoReq, hander)
-	prototypes.RegisterStreamHandlerType(protoTypeID, PeerVersionReq, hander)
+	prototypes.RegisterStreamHandlerType(protoTypeID, PeerInfoReq, &PeerInfoHandler{})
+	prototypes.RegisterStreamHandlerType(protoTypeID, PeerVersionReq, &PeerInfoHandler{})
 
 }
 
@@ -51,6 +50,7 @@ func (p *PeerInfoProtol) InitProtocol(data *prototypes.GlobalData) {
 	p.GlobalData = data
 	p.p2pCfg = data.ChainCfg.GetModuleConfig().P2P
 	prototypes.RegisterEventHandler(types.EventPeerInfo, p.handleEvent)
+	prototypes.RegisterEventHandler(types.EventGetNetInfo, p.netinfoHandleEvent)
 	go p.DetectNodeAddr()
 
 }
@@ -144,7 +144,7 @@ func (p *PeerInfoProtol) GetPeerInfo() []*types.P2PPeerInfo {
 		s, err := p.SendToStream(remoteId, req, PeerInfoReq, p.GetHost())
 		if err != nil {
 			log.Error("GetPeerInfo NewStream", "err", err, "remoteID", remoteId)
-			p.GetConnsManager().Delete(rID)
+			p.GetConnsManager().Delete(rID.Pretty())
 			continue
 		}
 		var resp types.MessagePeerInfoResp
@@ -197,9 +197,7 @@ func (p *PeerInfoProtol) DetectNodeAddr() {
 		s, err := p.Host.NewStream(context.Background(), rID, PeerVersionReq)
 		if err != nil {
 			log.Error("NewStream", "err", err, "remoteID", rID)
-			//if err.Error() == "dial backoff" {
-			p.GetConnsManager().Delete(rID)
-			//}
+			p.GetConnsManager().Delete(rID.Pretty())
 			continue
 		}
 		version.AddrFrom = s.Conn().LocalMultiaddr().String()
@@ -235,7 +233,6 @@ func (p *PeerInfoProtol) DetectNodeAddr() {
 //接收chain33其他模块发来的请求消息
 func (p *PeerInfoProtol) handleEvent(msg *queue.Message) {
 	pinfos := p.GetPeerInfo()
-	//peers := p.PeerInfoManager.FetchPeers()
 	var peers []*types.Peer
 	var peer types.Peer
 	for _, pinfo := range pinfos {

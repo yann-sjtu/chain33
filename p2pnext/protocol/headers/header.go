@@ -20,8 +20,7 @@ var (
 
 func init() {
 	prototypes.RegisterProtocolType(protoTypeID, &HeaderInfoProtol{})
-	var hander = new(HeaderInfoHander)
-	prototypes.RegisterStreamHandlerType(protoTypeID, HeaderInfoReq, hander)
+	prototypes.RegisterStreamHandlerType(protoTypeID, HeaderInfoReq, &HeaderInfoHander{})
 }
 
 const (
@@ -76,8 +75,6 @@ func (h *HeaderInfoProtol) OnReq(id string, getheaders *types.P2PGetHeaders, s c
 		return
 	}
 
-	log.Info("OnReq", "SendProtoMessage", "ok")
-
 }
 
 //GetHeaders 接收来自chain33 blockchain模块发来的请求
@@ -111,7 +108,7 @@ func (h *HeaderInfoProtol) handleEvent(msg *queue.Message) {
 		if err != nil {
 			log.Error("handleEvent", "SendProtoMessage", err)
 			rID, _ := peer.IDB58Decode(pid)
-			h.GetConnsManager().Delete(rID)
+			h.GetConnsManager().Delete(rID.Pretty())
 
 			continue
 		}

@@ -2,16 +2,15 @@ package manage
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/33cn/chain33/common/log/log15"
 	core "github.com/libp2p/go-libp2p-core"
 	"github.com/libp2p/go-libp2p-core/metrics"
-	multiaddr "github.com/multiformats/go-multiaddr"
-
-	//net "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/peerstore"
+	multiaddr "github.com/multiformats/go-multiaddr"
 )
 
 var (
@@ -19,6 +18,7 @@ var (
 )
 
 type ConnManager struct {
+	store            sync.Map
 	host             core.Host
 	pstore           peerstore.Peerstore
 	bandwidthTracker *metrics.BandwidthCounter
@@ -48,12 +48,34 @@ func (s *ConnManager) GetLatencyByPeer(pids []peer.ID) map[string]time.Duration 
 }
 
 func (s *ConnManager) MonitorAllPeers(seeds []string, host core.Host) {
+	var seedInfos []*peer.AddrInfo
+	for _, seed := range seeds {
+		addr, err := multiaddr.NewMultiaddr(seed)
+		if err != nil {
+			continue
+		}
+		peerinfo, err := peer.AddrInfoFromP2pAddr(addr)
+		if err != nil {
+			log.Info("connectPeers", "err", err, "pid", peerinfo.ID.Pretty())
+			continue
+		}
+		seedInfos = append(seedInfos, peerinfo)
+
+	}
 	for {
+		var peerInfos []*peer.AddrInfo
+
+		peerInfos = append(peerInfos, seedInfos...)
 		log.Info("--------------时延--------------------")
-		for _, pid := range s.pstore.PeersWithAddrs() {
+		for _, pid := range s.pstore.Peers() {
 			//统计每个节点的时延
 			tduration := s.pstore.LatencyEWMA(pid)
+			if tduration == 0 {
+				continue
+			}
 			log.Info("MonitorAllPeers", "LatencyEWMA timeDuration", tduration, "pid", pid)
+			info := s.pstore.PeerInfo(pid)
+			peerInfos = append(peerInfos, &info)
 		}
 		log.Info("------------BandTracker--------------")
 		bandByPeer := s.bandwidthTracker.GetBandwidthByPeer()
@@ -67,61 +89,87 @@ func (s *ConnManager) MonitorAllPeers(seeds []string, host core.Host) {
 		}
 
 		log.Info("-------------------------------------")
+		log.Info("MounitorAllPeers", "peerstore peers", s.pstore.Peers(), "connPeer num", s.Size())
 		time.Sleep(time.Second * 5)
-		if s.Size() == 0 {
-			s.connectSeeds(seeds)
+		if s.Size() <= 25 { //尝试连接种子节点
+			s.connectPeers(peerInfos, peerstore.ProviderAddrTTL)
 		}
 	}
 }
 
-func (s *ConnManager) connectSeeds(seeds []string) {
+func (s *ConnManager) connectPeers(pinfo []*peer.AddrInfo, ttl time.Duration) {
+	log.Info("connectPeers", "pids num", len(pinfo))
+	for _, pinfo := range pinfo {
 
-	for _, seed := range seeds {
-		addr, _ := multiaddr.NewMultiaddr(seed)
-		peerinfo, err := peer.AddrInfoFromP2pAddr(addr)
-		if err != nil {
-			panic(err)
-		}
-
-		err = s.host.Connect(context.Background(), *peerinfo)
+		err := s.host.Connect(context.Background(), *pinfo)
 		if err != nil {
 			log.Error("ConnectSeeds  Connect", "err", err)
 			continue
 		}
-		s.pstore.AddAddrs(peerinfo.ID, peerinfo.Addrs, peerstore.PermanentAddrTTL)
+		if s.Size() >= 25 {
+			break
+		}
+		s.Add(pinfo)
+		s.pstore.AddAddrs(pinfo.ID, pinfo.Addrs, ttl)
 	}
 }
 
-func (s *ConnManager) Add(pr peer.AddrInfo, ttl time.Duration) {
-	s.pstore.AddAddrs(pr.ID, pr.Addrs, ttl)
+func (s *ConnManager) Add(pr *peer.AddrInfo) {
+	s.store.Store(pr.ID.Pretty(), pr)
+	//s.pstore.AddAddrs(pr.ID, pr.Addrs, ttl)
 }
 
-func (s *ConnManager) Delete(pid peer.ID) {
-	s.pstore.ClearAddrs(pid)
+func (s *ConnManager) Delete(pid string) {
+	s.store.Delete(pid)
 
 }
 
-func (s *ConnManager) Get(pid peer.ID) peer.AddrInfo {
-	return s.pstore.PeerInfo(pid)
+func (s *ConnManager) Get(pid string) *peer.AddrInfo {
+	v, ok := s.store.Load(pid)
+	if ok {
+		return v.(*peer.AddrInfo)
+	}
+	return nil
 }
 
 func (s *ConnManager) Fetch() []string {
 
 	var pids []string
-	bandByPeer := s.bandwidthTracker.GetBandwidthByPeer()
 
-	for pid, _ := range bandByPeer {
-		if pid.Validate() == nil {
-			pids = append(pids, pid.Pretty())
+	s.store.Range(func(k interface{}, v interface{}) bool {
+		pids = append(pids, k.(string))
+		return true
 
-		}
-	}
+	})
+	// bandByPeer := s.bandwidthTracker.GetBandwidthByPeer()
+
+	// for pid, _ := range bandByPeer {
+
+	// 	if pid.Validate() == nil {
+	// 		pids = append(pids, pid.Pretty())
+
+	// 	}
+	// }
 	return pids
 }
 
 func (s *ConnManager) Size() int {
-	bandByPeer := s.bandwidthTracker.GetBandwidthByPeer()
+	//bandByPeer := s.bandwidthTracker.GetBandwidthByPeer()
 
-	return len(bandByPeer)
+	return len(s.Fetch())
 
+}
+
+func convertPeers(peers []string) map[string]*peer.AddrInfo {
+	pinfos := make(map[string]*peer.AddrInfo, len(peers))
+	for _, addr := range peers {
+		maddr := multiaddr.StringCast(addr)
+		p, err := peer.AddrInfoFromP2pAddr(maddr)
+		if err != nil {
+			log.Error("convertPeers", "AddrInfoFromP2pAddr", err)
+			continue
+		}
+		pinfos[p.ID.Pretty()] = p
+	}
+	return pinfos
 }
