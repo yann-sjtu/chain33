@@ -9,6 +9,7 @@ import (
 	protocol "github.com/libp2p/go-libp2p-core/protocol"
 
 	p2pty "github.com/33cn/chain33/p2pnext/types"
+	store "github.com/33cn/chain33/p2pnext/store"
 	opts "github.com/libp2p/go-libp2p-kad-dht/opts"
 	kbt "github.com/libp2p/go-libp2p-kbucket"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	discovery "github.com/libp2p/go-libp2p-discovery"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
+	ds "github.com/ipfs/go-datastore"
 )
 
 var (
@@ -25,6 +27,7 @@ var (
 
 const RendezvousString = "chain33-let's play!"
 const DhtProtoID = "/ipfs/kad/chain33/1.0.0"
+const DhtStoreNamespace  = "chain33-dhtstore"
 
 type Discovery struct {
 	KademliaDHT      *dht.IpfsDHT
@@ -32,13 +35,24 @@ type Discovery struct {
 	mndsService      *mdns
 }
 
+type blankValidator struct{}
+func (blankValidator) Validate(_ string, _ []byte) error        { return nil }
+func (blankValidator) Select(_ string, _ [][]byte) (int, error) { return 0, nil }
+
 func (d *Discovery) InitDht(host host.Host, peersInfo []peer.AddrInfo, cfg *p2pty.P2PSubConfig, isTestNet bool) {
 
 	// Make the DHT,不同的ID进入不同的网络。
 	//如果不修改DHTProto 则有可能会连入IPFS网络，dhtproto=/ipfs/kad/1.0.0
 
-	opt := opts.Protocols(protocol.ID(DhtProtoID + "/" + fmt.Sprintf("%d", cfg.Channel)))
-	kademliaDHT, _ := dht.New(context.Background(), host, opt)
+	protocol := protocol.ID(DhtProtoID + "/" + fmt.Sprintf("%d", cfg.Channel))
+	validator := blankValidator{}
+	store := &store.DHTStore{Values: make(map[ds.Key][]byte)}
+	kademliaDHT, _ := dht.New(context.Background(), host,
+		opts.Protocols(protocol),
+		opts.Datastore(store),
+		opts.NamespacedValidator(DhtStoreNamespace, validator),
+	)
+
 	d.KademliaDHT = kademliaDHT
 
 	//连接内置种子，以及addrbook存储的节点
