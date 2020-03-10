@@ -7,6 +7,7 @@ import (
 )
 
 type DHTStore struct {
+	//for test
 	Values map[datastore.Key][]byte
 }
 
