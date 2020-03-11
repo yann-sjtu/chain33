@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"errors"
 
 	"github.com/33cn/chain33/types"
 	"github.com/gogo/protobuf/proto"
@@ -12,27 +11,27 @@ import (
 type StoreHelper struct {
 }
 
-func (bs *StoreHelper) PutBlock(routing *dht.IpfsDHT, block *types.Block, cfg *types.Chain33Config) error {
+func (s *StoreHelper) PutBlock(routing *dht.IpfsDHT, block *types.Block, cfg *types.Chain33Config) error {
 	key := MakeBlockHashAsKey(block.Hash(cfg))
-	value, err := MakeBlockAsValue(block)
+	value, err := proto.Marshal(block)
 	if err != nil {
-		return errors.New("PutBlock  MakeBlockAsValue error ")
+		return err
 	}
-
-	err = routing.PutValue(context.Background(), key, value)
-
-	return err
+	return routing.PutValue(context.Background(), key, value)
 }
 
-func (bs *StoreHelper) GetBlockByHash(routing *dht.IpfsDHT, hash []byte) (*types.Block, error) {
+func (s *StoreHelper) GetBlockByHash(routing *dht.IpfsDHT, hash []byte) (*types.Block, error) {
 	key := MakeBlockHashAsKey(hash)
 	value, err := routing.GetValue(context.Background(), key)
 	if err != nil {
-		return nil, errors.New("GetBlockByHash GetValue error ")
+		return nil, err
 	}
 
-	var block *types.Block
+	block := &types.Block{}
 	err = proto.Unmarshal(value, block)
+	if err != nil {
+		return nil, err
+	}
 
 	return block, err
 }

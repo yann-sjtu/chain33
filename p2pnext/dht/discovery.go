@@ -6,19 +6,18 @@ import (
 	"fmt"
 	"time"
 
-	protocol "github.com/libp2p/go-libp2p-core/protocol"
+	"github.com/libp2p/go-libp2p-core/protocol"
 
 	p2pty "github.com/33cn/chain33/p2pnext/types"
 	opts "github.com/libp2p/go-libp2p-kad-dht/opts"
 	kbt "github.com/libp2p/go-libp2p-kbucket"
 
 	"github.com/33cn/chain33/common/log/log15"
-	host "github.com/libp2p/go-libp2p-core/host"
+	"github.com/33cn/chain33/p2pnext/store"
+	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 	discovery "github.com/libp2p/go-libp2p-discovery"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
-	"github.com/33cn/chain33/p2pnext/store"
-	ds "github.com/ipfs/go-datastore"
 )
 
 var (
@@ -34,10 +33,6 @@ type Discovery struct {
 	mndsService      *mdns
 }
 
-type blankValidator struct{}
-func (blankValidator) Validate(_ string, _ []byte) error        { return nil }
-func (blankValidator) Select(_ string, _ [][]byte) (int, error) { return 0, nil }
-
 func InitDhtDiscovery(host host.Host, peersInfo []peer.AddrInfo, cfg *p2pty.P2PSubConfig, isTestNet bool) *Discovery {
 
 	// Make the DHT,不同的ID进入不同的网络。
@@ -45,12 +40,10 @@ func InitDhtDiscovery(host host.Host, peersInfo []peer.AddrInfo, cfg *p2pty.P2PS
 	d := new(Discovery)
 
 	protocol := protocol.ID(DhtProtoID + "/" + fmt.Sprintf("%d", cfg.Channel))
-	validator := blankValidator{}
-	dataStore := &store.Persistent{Values: make(map[ds.Key][]byte)}
 	kademliaDHT, _ := dht.New(context.Background(), host,
 		opts.Protocols(protocol),
-		opts.Datastore(dataStore),
-		opts.NamespacedValidator(store.DhtStoreNamespace, validator),
+		store.DataStoreOption(),
+		store.ValidatorOption(),
 	)
 
 	d.kademliaDHT = kademliaDHT
@@ -64,6 +57,10 @@ func InitDhtDiscovery(host host.Host, peersInfo []peer.AddrInfo, cfg *p2pty.P2PS
 	}
 
 	return d
+}
+
+func (d *Discovery) Routing() *dht.IpfsDHT {
+	return d.kademliaDHT
 }
 
 func (d *Discovery) FindPeers() (<-chan peer.AddrInfo, error) {

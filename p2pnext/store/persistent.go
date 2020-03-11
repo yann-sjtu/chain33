@@ -1,36 +1,30 @@
 package store
 
 import (
-	"errors"
-	"fmt"
-
-	"github.com/gogo/protobuf/proto"
+	dbm "github.com/33cn/chain33/common/db"
 	"github.com/ipfs/go-datastore"
 	dsq "github.com/ipfs/go-datastore/query"
-	recpb "github.com/libp2p/go-libp2p-record/pb"
-	"github.com/33cn/chain33/types"
 )
 
 type Persistent struct {
-	//for test
-	Values map[datastore.Key][]byte
+	DB dbm.DB
 }
 
 func (p *Persistent) Get(key datastore.Key) (value []byte, err error) {
-	val, found := p.Values[key]
-	if !found {
-		return nil, nil
+	v, e := p.DB.Get(key.Bytes())
+	if v == nil {
+		return nil, datastore.ErrNotFound
 	}
-	return val, nil
+	return v, e
 }
 
 func (p *Persistent) Has(key datastore.Key) (exists bool, err error) {
-	_, found := p.Values[key]
-	return found, nil
+	value, err := p.DB.Get(key.Bytes())
+	return value != nil, err
 }
 
 func (p *Persistent) GetSize(key datastore.Key) (size int, err error) {
-	return -1, errors.New("GetSize ErrNotFound")
+	return -1, datastore.ErrNotFound
 }
 
 func (p *Persistent) Query(q dsq.Query) (dsq.Results, error) {
@@ -38,27 +32,11 @@ func (p *Persistent) Query(q dsq.Query) (dsq.Results, error) {
 }
 
 func (p *Persistent) Put(key datastore.Key, value []byte) error {
-	p.Values[key] = value
-
-	rec := &recpb.Record{}
-	err := proto.Unmarshal(value, rec)
-	if err != nil {
-		return errors.New("Put Unmarshal error ")
-	}
-
-	//todo:as block unmarshal,should support unmarshal by type
-	block:=&types.Block{}
-	err = proto.Unmarshal(rec.Value, block)
-	if err != nil {
-		return  err
-	}
-	fmt.Println("kadtest block height ",block.Height)
-
-	return nil
+	return p.DB.Set(key.Bytes(), value)
 }
 
 func (p *Persistent) Delete(key datastore.Key) error {
-	return nil
+	return p.DB.Delete(key.Bytes())
 }
 
 func (p *Persistent) Close() error {
