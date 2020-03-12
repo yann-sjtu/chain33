@@ -27,13 +27,6 @@ const (
 	PutData   = "/chain33/put-data/1.0.0"
 )
 
-//var protocolIDs []protocol.ID
-//
-//func init() {
-//	protocolIDs = append(protocolIDs, FetchData)
-//	protocolIDs = append(protocolIDs, PutData)
-//}
-
 type StoreProtocol struct {
 	protocol2.BaseProtocol //default协议实现
 	protocol2.Global       //获取全局变量接口
@@ -146,8 +139,8 @@ func (s *StoreProtocol) onFetchData(stream core.Stream, in interface{}) {
 		return
 	}
 
-	if ok, _ := s.DB().Has(packageKey(data.Hash)); ok {
-		b, err := s.DB().Get(packageKey(data.Hash))
+	if ok, _ := s.DB().Has(datastore.NewKey(data.Hash)); ok {
+		b, err := s.DB().Get(datastore.NewKey(data.Hash))
 		if err != nil {
 			res.Error = err
 			return
@@ -171,7 +164,7 @@ func (s *StoreProtocol) onFetchData(stream core.Stream, in interface{}) {
 		}
 		return
 	}
-	peers := s.Discovery().KademliaDHT.RoutingTable().NearestPeers(kbt.ConvertPeerID(s.Host().ID()), AlphaValue)
+	peers := s.Discovery().Routing().RoutingTable().NearestPeers(kbt.ConvertPeerID(s.Host().ID()), AlphaValue)
 	res.Result = peers
 	return
 
@@ -202,7 +195,7 @@ func (s *StoreProtocol) onPutData(stream core.Stream, in interface{}) {
 		res.Error = err
 		return
 	}
-	err = s.DB().Put(datastore.NewKey(BlocksPrefix+data.Hash), b)
+	err = s.DB().Put(datastore.NewKey(data.Hash), b)
 	if err != nil {
 		res.Error = err
 		return
@@ -210,7 +203,7 @@ func (s *StoreProtocol) onPutData(stream core.Stream, in interface{}) {
 	err = s.AddLocalIndexHash(data.Hash)
 	if err != nil {
 		//索引存储失败，存储的区块也要回滚
-		_ = s.DB().Delete(datastore.NewKey(BlocksPrefix + data.Hash))
+		_ = s.DB().Delete(datastore.NewKey(BlocksNameSpace + data.Hash))
 		res.Error = err
 		return
 	}

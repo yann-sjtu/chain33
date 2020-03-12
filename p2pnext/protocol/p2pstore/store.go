@@ -17,7 +17,6 @@ import (
 )
 
 const (
-	BlocksPrefix          = "/blocks/"
 	LocalIndexHashListKey = "local-index-hash-list"
 	BlocksPerPackage      = 1000
 )
@@ -40,7 +39,7 @@ func (s *StoreProtocol) SaveBlocks(blocks []*types.Block) error {
 	//TODO 多次递归查询更大范围内最近de节点
 	//TODO 目前返回20个，可以duo返回几个
 	ctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
-	peerCh, err := s.Discovery().KademliaDHT.GetClosestPeers(ctx, BlocksPrefix+hash)
+	peerCh, err := s.Discovery().Routing().GetClosestPeers(ctx, hash)
 	if err != nil {
 		return err
 	}
@@ -64,7 +63,7 @@ func (s *StoreProtocol) SaveBlocks(blocks []*types.Block) error {
 		rw.Flush()
 		stream.Close()
 	}
-	return s.Discovery().KademliaDHT.PutValue(context.Background(), BlocksPrefix+string(hash), value)
+	return nil
 }
 
 func (s *StoreProtocol) GetBlocksByIndexHash(param *types2.FetchBlocks) ([]*types.Block, error) {
@@ -72,7 +71,7 @@ func (s *StoreProtocol) GetBlocksByIndexHash(param *types2.FetchBlocks) ([]*type
 		return nil, ErrInvalidHash
 	}
 
-	b, err := s.DB().Get(packageKey(param.Hash))
+	b, err := s.DB().Get(datastore.NewKey(param.Hash))
 	if err != nil {
 		return nil, err
 	}
@@ -82,10 +81,10 @@ func (s *StoreProtocol) GetBlocksByIndexHash(param *types2.FetchBlocks) ([]*type
 
 	//本地不存在，则向临近节点查询
 	//首先从本地路由表获取 *3* 个最近的节点
-	peers := s.Discovery().KademliaDHT.RoutingTable().NearestPeers(kbt.ConvertKey(BlocksPrefix+param.Hash), 3)
+	peers := s.Discovery().Routing().RoutingTable().NearestPeers(kbt.ConvertKey(param.Hash), 3)
 	responseCh := make(chan protocol2.Response, AlphaValue)
 	cancelCtx, cancelFunc := context.WithCancel(context.Background())
-	//递归查询，知道查询到数据
+	//递归查询，直到查询到数据
 	//TODO 加超时时间
 Iter:
 	for _, peerID := range peers {
@@ -93,7 +92,10 @@ Iter:
 	}
 
 	for res := range responseCh {
-		//三个并发请求任意一个返回时，cancel掉另外两个
+		//三个并发请求任意一个正常返回时，cancel掉另外两个
+		if res.Error != nil {
+			continue
+		}
 		cancelFunc()
 		if blocks, ok := res.Result.([]*types.Block); ok {
 			return blocks, nil
@@ -119,7 +121,7 @@ func (s *StoreProtocol) Republish() error {
 	}
 
 	for hash := range hashMap {
-		value, err := s.DB().Get(packageKey(hash))
+		value, err := s.DB().Get(datastore.NewKey(hash))
 		if err != nil {
 			//TODO +log
 			continue
@@ -197,12 +199,3 @@ func packageHash(blocks []*types.Block) string {
 	}
 	return string(common.Sha256(value))
 }
-
-func packageKey(hash string) datastore.Key {
-	return datastore.NewKey(BlocksPrefix + hash)
-}
-
-//func checkResponse(stream network.Stream) bool {
-//	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
-//	rw.Read()
-//}
