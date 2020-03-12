@@ -13,7 +13,6 @@ import (
 	kbt "github.com/libp2p/go-libp2p-kbucket"
 
 	"github.com/33cn/chain33/common/log/log15"
-	"github.com/33cn/chain33/p2pnext/store"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 	discovery "github.com/libp2p/go-libp2p-discovery"
@@ -40,11 +39,7 @@ func InitDhtDiscovery(host host.Host, peersInfo []peer.AddrInfo, cfg *p2pty.P2PS
 	d := new(Discovery)
 
 	protocol := protocol.ID(DhtProtoID + "/" + fmt.Sprintf("%d", cfg.Channel))
-	kademliaDHT, _ := dht.New(context.Background(), host,
-		opts.Protocols(protocol),
-		store.DataStoreOption(cfg),
-		store.ValidatorOption(),
-	)
+	kademliaDHT, _ := dht.New(context.Background(), host, opts.Protocols(protocol))
 
 	d.kademliaDHT = kademliaDHT
 
