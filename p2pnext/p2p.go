@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/33cn/chain33/p2pnext/store"
+
 	"github.com/33cn/chain33/client"
 	logger "github.com/33cn/chain33/common/log/log15"
 	p2pmgr "github.com/33cn/chain33/p2p/manage"
@@ -126,9 +128,9 @@ func New(mgr *p2pmgr.P2PMgr, subCfg []byte) p2pmgr.IP2P {
 		mgr:             mgr,
 		taskGroup:       &sync.WaitGroup{},
 	}
-
 	p2p.discovery = dht.InitDhtDiscovery(p2p.host, p2p.addrBook.AddrsInfo(), p2p.subCfg, p2p.chainCfg.IsTestNet())
 	p2p.connManager = manage.NewConnManager(p2p.host, p2p.discovery, bandwidthTracker)
+	p2p.db = store.NewDataStore(p2p.subCfg)
 	log.Info("NewP2p", "peerId", p2p.host.ID(), "addrs", p2p.host.Addrs())
 	return p2p
 }
