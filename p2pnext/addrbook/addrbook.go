@@ -1,4 +1,4 @@
-package p2pnext
+package addrbook
 
 import (
 	"crypto/rand"
@@ -9,6 +9,7 @@ import (
 	"github.com/33cn/chain33/p2p/manage"
 
 	"github.com/33cn/chain33/common/db"
+	logger "github.com/33cn/chain33/common/log/log15"
 	"github.com/33cn/chain33/types"
 	p2pcrypto "github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -18,6 +19,8 @@ const (
 	addrkeyTag = "mutiaddrs"
 	privKeyTag = "privkey"
 )
+
+var log = logger.New("module", "p2pnext.addrbook")
 
 // AddrBook peer address manager
 type AddrBook struct {
@@ -90,7 +93,7 @@ func (a *AddrBook) initKey() {
 			if err == nil {
 				break
 			}
-			if i == maxRetry-1 && err != nil {
+			if i == maxRetry-1 {
 				panic(err.Error())
 			}
 		}

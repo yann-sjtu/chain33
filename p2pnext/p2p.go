@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
-
 	"time"
 
 	"github.com/33cn/chain33/client"
 	logger "github.com/33cn/chain33/common/log/log15"
+	p2pmgr "github.com/33cn/chain33/p2p/manage"
+	"github.com/33cn/chain33/p2pnext/addrbook"
 	"github.com/33cn/chain33/p2pnext/dht"
 	"github.com/33cn/chain33/p2pnext/manage"
 	"github.com/33cn/chain33/p2pnext/protocol"
@@ -17,15 +18,12 @@ import (
 	p2pty "github.com/33cn/chain33/p2pnext/types"
 	"github.com/33cn/chain33/queue"
 	"github.com/33cn/chain33/types"
-	libp2p "github.com/libp2p/go-libp2p"
+	ds "github.com/ipfs/go-datastore"
+	"github.com/libp2p/go-libp2p"
 	core "github.com/libp2p/go-libp2p-core"
-
-	"github.com/libp2p/go-libp2p-core/metrics"
-
 	p2pcrypto "github.com/libp2p/go-libp2p-core/crypto"
-
-	p2pmgr "github.com/33cn/chain33/p2p/manage"
-	multiaddr "github.com/multiformats/go-multiaddr"
+	"github.com/libp2p/go-libp2p-core/metrics"
+	"github.com/multiformats/go-multiaddr"
 )
 
 var log = logger.New("module", "p2pnext")
@@ -35,22 +33,71 @@ func init() {
 }
 
 type P2P struct {
-	chainCfg      *types.Chain33Config
-	host          core.Host
-	discovery     *dht.Discovery
-	connManag     *manage.ConnManager
-	peerInfoManag *manage.PeerInfoManager
-	api           client.QueueProtocolAPI
-	client        queue.Client
-	addrbook      *AddrBook
-	taskGroup     *sync.WaitGroup
-
-	closed  int32
-	p2pCfg  *types.P2P
-	subCfg  *p2pty.P2PSubConfig
-	mgr     *p2pmgr.P2PMgr
-	subChan chan interface{}
+	chainCfg        *types.Chain33Config
+	host            core.Host
+	discovery       *dht.Discovery
+	connManager     *manage.ConnManager
+	peerInfoManager *manage.PeerInfoManager
+	api             client.QueueProtocolAPI
+	client          queue.Client
+	addrBook        *addrbook.AddrBook
+	taskGroup       *sync.WaitGroup
+	closed          int32
+	p2pCfg          *types.P2P
+	subCfg          *p2pty.P2PSubConfig
+	mgr             *p2pmgr.P2PMgr
+	subChan         chan interface{}
+	db              ds.Datastore
 }
+
+// 定义方法用于满足接口实现
+func (p *P2P) ChainConfig() *types.Chain33Config {
+	return p.chainCfg
+}
+
+func (p *P2P) Host() core.Host {
+	return p.host
+}
+
+func (p *P2P) Discovery() *dht.Discovery {
+	return p.discovery
+}
+
+func (p *P2P) ConnMgr() *manage.ConnManager {
+	return p.connManager
+}
+
+func (p *P2P) PeerInfoMgr() *manage.PeerInfoManager {
+	return p.peerInfoManager
+}
+
+func (p *P2P) API() client.QueueProtocolAPI {
+	return p.api
+}
+
+func (p *P2P) Client() queue.Client {
+	return p.client
+}
+
+func (p *P2P) AddrBook() *addrbook.AddrBook {
+	return p.addrBook
+}
+
+func (p *P2P) P2PConfig() *types.P2P {
+	return p.p2pCfg
+}
+
+func (p *P2P) SubConfig() *p2pty.P2PSubConfig {
+	return p.subCfg
+}
+
+func (p *P2P) DB() ds.Datastore {
+	return p.db
+}
+
+//。。。。。。
+
+//TODO 实现所有获取P2P字段的接口
 
 func New(mgr *p2pmgr.P2PMgr, subCfg []byte) p2pmgr.IP2P {
 
@@ -62,26 +109,26 @@ func New(mgr *p2pmgr.P2PMgr, subCfg []byte) p2pmgr.IP2P {
 		mcfg.Port = 13803
 	}
 
-	addrbook := NewAddrBook(p2pCfg)
+	addrbook := addrbook.NewAddrBook(p2pCfg)
 	priv := addrbook.GetPrivkey()
 
 	bandwidthTracker := metrics.NewBandwidthCounter()
 	host := newHost(mcfg.Port, priv, bandwidthTracker)
 	p2p := &P2P{
-		host:          host,
-		peerInfoManag: manage.NewPeerInfoManager(mgr.Client),
-		chainCfg:      chainCfg,
-		subCfg:        mcfg,
-		p2pCfg:        p2pCfg,
-		client:        mgr.Client,
-		api:           mgr.SysApi,
-		discovery:     &dht.Discovery{},
-		addrbook:      addrbook,
-		mgr:           mgr,
-		taskGroup:     &sync.WaitGroup{},
+		host:            host,
+		peerInfoManager: manage.NewPeerInfoManager(mgr.Client),
+		chainCfg:        chainCfg,
+		subCfg:          mcfg,
+		p2pCfg:          p2pCfg,
+		client:          mgr.Client,
+		api:             mgr.SysApi,
+		discovery:       &dht.Discovery{},
+		addrBook:        addrbook,
+		mgr:             mgr,
+		taskGroup:       &sync.WaitGroup{},
 	}
 
-	p2p.connManag = manage.NewConnManager(p2p.host, p2p.discovery, bandwidthTracker)
+	p2p.connManager = manage.NewConnManager(p2p.host, p2p.discovery, bandwidthTracker)
 	log.Info("NewP2p", "peerId", p2p.host.ID(), "addrs", p2p.host.Addrs())
 	return p2p
 }
@@ -111,7 +158,7 @@ func newHost(port int32, priv p2pcrypto.PrivKey, bandwidthTracker *metrics.Bandw
 }
 
 func (p *P2P) managePeers() {
-	go p.connManag.MonitorAllPeers(p.subCfg.Seeds, p.host)
+	go p.connManager.MonitorAllPeers(p.subCfg.Seeds, p.host)
 
 	for {
 		peerlist := p.discovery.RoutingTale()
@@ -124,9 +171,9 @@ func (p *P2P) managePeers() {
 		}
 		select {
 		case <-time.After(time.Minute * 10):
-			//Reflesh addrbook
-			peersInfo := p.discovery.FindLocalPeers(p.connManag.FindNearestPeers())
-			p.addrbook.SaveAddr(peersInfo)
+			//Reflesh addrBook
+			peersInfo := p.discovery.FindLocalPeers(p.connManager.FindNearestPeers())
+			p.addrBook.SaveAddr(peersInfo)
 
 		}
 	}
@@ -140,15 +187,15 @@ func (p *P2P) StartP2P() {
 		ChainCfg:        p.chainCfg,
 		QueueClient:     p.client,
 		Host:            p.host,
-		ConnManager:     p.connManag,
+		ConnManager:     p.connManager,
 		Discovery:       p.discovery,
-		PeerInfoManager: p.peerInfoManag,
+		PeerInfoManager: p.peerInfoManager,
 		P2PManager:      p.mgr,
 		SubConfig:       p.subCfg,
 	}
 	protocol.Init(env)
 	//初始化dht列表需要优先执行, 否则放在协程中有先后秩序问题, 导致未初始化在其他协程中被使用
-	p.discovery.InitDht(p.host, p.addrbook.AddrsInfo(), p.subCfg, p.chainCfg.IsTestNet())
+	p.discovery.InitDht(p.host, p.addrBook.AddrsInfo(), p.subCfg, p.chainCfg.IsTestNet())
 	go p.managePeers()
 	go p.handleP2PEvent()
 	go p.findLANPeers()
@@ -172,7 +219,7 @@ func (p *P2P) findLANPeers() {
 			continue
 		}
 
-		p.connManag.AddNeighbors(&neighbors)
+		p.connManager.AddNeighbors(&neighbors)
 
 	}
 }
@@ -205,8 +252,8 @@ func (p *P2P) CloseP2P() {
 	p.mgr.PubSub.Unsub(p.subChan)
 	atomic.StoreInt32(&p.closed, 1)
 	p.waitTaskDone()
-	p.connManag.Close()
-	p.peerInfoManag.Close()
+	p.connManager.Close()
+	p.peerInfoManager.Close()
 	p.host.Close()
 	prototypes.ClearEventHandler()
 }
