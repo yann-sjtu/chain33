@@ -32,4 +32,11 @@ type P2PSubConfig struct {
 	//区块轻广播的最低打包交易数, 大于该值时区块内交易采用短哈希广播
 	MinLtBlockTxNum int32 `protobuf:"varint,12,opt,name=minLtBlockTxNum" json:"minLtBlockTxNum,omitempty"`
 	//指定p2p类型, 支持gossip, dht
+
+	// DHT使用的数据库类型
+	DHTDataDriver string `protobuf:"bytes,13,opt,name=driver" json:"driver,omitempty"`
+	// DHT数据库文件目录
+	DHTDataPath string `protobuf:"bytes,14,opt,name=dbPath" json:"dbPath,omitempty"`
+	// DHT数据库缓存大小
+	DHTDataCache  int32 `protobuf:"varint,15,opt,name=dbCache" json:"dbCache,omitempty"`
 }

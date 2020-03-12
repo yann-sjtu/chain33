@@ -39,10 +39,12 @@ func InitDhtDiscovery(host host.Host, peersInfo []peer.AddrInfo, cfg *p2pty.P2PS
 	//如果不修改DHTProto 则有可能会连入IPFS网络，dhtproto=/ipfs/kad/1.0.0
 	d := new(Discovery)
 
+
+
 	protocol := protocol.ID(DhtProtoID + "/" + fmt.Sprintf("%d", cfg.Channel))
 	kademliaDHT, _ := dht.New(context.Background(), host,
 		opts.Protocols(protocol),
-		store.DataStoreOption(),
+		store.DataStoreOption(cfg),
 		store.ValidatorOption(),
 	)
 

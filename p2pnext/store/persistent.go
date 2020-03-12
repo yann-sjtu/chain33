@@ -7,11 +7,11 @@ import (
 )
 
 type Persistent struct {
-	DB dbm.DB
+	db dbm.DB
 }
 
 func (p *Persistent) Get(key datastore.Key) (value []byte, err error) {
-	v, e := p.DB.Get(key.Bytes())
+	v, e := p.db.Get(key.Bytes())
 	if v == nil {
 		return nil, datastore.ErrNotFound
 	}
@@ -19,7 +19,7 @@ func (p *Persistent) Get(key datastore.Key) (value []byte, err error) {
 }
 
 func (p *Persistent) Has(key datastore.Key) (exists bool, err error) {
-	value, err := p.DB.Get(key.Bytes())
+	value, err := p.db.Get(key.Bytes())
 	return value != nil, err
 }
 
@@ -32,14 +32,15 @@ func (p *Persistent) Query(q dsq.Query) (dsq.Results, error) {
 }
 
 func (p *Persistent) Put(key datastore.Key, value []byte) error {
-	return p.DB.Set(key.Bytes(), value)
+	return p.db.Set(key.Bytes(), value)
 }
 
 func (p *Persistent) Delete(key datastore.Key) error {
-	return p.DB.Delete(key.Bytes())
+	return p.db.Delete(key.Bytes())
 }
 
 func (p *Persistent) Close() error {
+	p.db.Close()
 	return nil
 }
 

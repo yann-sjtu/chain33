@@ -11,8 +11,8 @@ import (
 type StoreHelper struct {
 }
 
-func (s *StoreHelper) PutBlock(routing *dht.IpfsDHT, block *types.Block, cfg *types.Chain33Config) error {
-	key := MakeBlockHashAsKey(block.Hash(cfg))
+func (s *StoreHelper) PutBlock(routing *dht.IpfsDHT, block *types.Block, blockHash []byte) error {
+	key := MakeBlockHashAsKey(blockHash)
 	value, err := proto.Marshal(block)
 	if err != nil {
 		return err
@@ -20,8 +20,8 @@ func (s *StoreHelper) PutBlock(routing *dht.IpfsDHT, block *types.Block, cfg *ty
 	return routing.PutValue(context.Background(), key, value)
 }
 
-func (s *StoreHelper) GetBlockByHash(routing *dht.IpfsDHT, hash []byte) (*types.Block, error) {
-	key := MakeBlockHashAsKey(hash)
+func (s *StoreHelper) GetBlockByHash(routing *dht.IpfsDHT, blockHash []byte) (*types.Block, error) {
+	key := MakeBlockHashAsKey(blockHash)
 	value, err := routing.GetValue(context.Background(), key)
 	if err != nil {
 		return nil, err
