@@ -17,9 +17,8 @@ import (
 	"github.com/33cn/chain33/queue"
 	"github.com/33cn/chain33/types"
 
-	// register gzip
 	"github.com/33cn/chain33/p2p/manage"
-	_ "google.golang.org/grpc/encoding/gzip"
+	_ "google.golang.org/grpc/encoding/gzip" // register gzip
 )
 
 func init() {
@@ -71,13 +70,12 @@ type P2p struct {
 	waitRestart  chan struct{}
 	taskGroup    *sync.WaitGroup
 
-	closed   int32
-	restart  int32
-	chainCfg *types.Chain33Config
-	p2pCfg   *types.P2P
-	subCfg   *subConfig
-	mgr      *manage.P2PMgr
-	subChan  chan interface{}
+	closed  int32
+	restart int32
+	p2pCfg  *types.P2P
+	subCfg  *subConfig
+	mgr     *manage.P2PMgr
+	subChan chan interface{}
 }
 
 // New produce a p2p object
@@ -124,8 +122,10 @@ func New(mgr *manage.P2PMgr, subCfg []byte) manage.IP2P {
 	p2p.subCfg = mcfg
 	p2p.client = mgr.Client
 	p2p.mgr = mgr
-	p2p.api = mgr.SysApi
+	p2p.api = mgr.SysAPI
 	p2p.taskGroup = &sync.WaitGroup{}
+	//从p2p manger获取pub的系统消息
+	p2p.subChan = p2p.mgr.PubSub.Sub(manage.GossipTypeName)
 	return p2p
 }
 
@@ -341,8 +341,6 @@ func (network *P2p) subP2pMsg() {
 	go func() {
 
 		var taskIndex int64
-		//从p2p manger获取pub的系统消息
-		network.subChan = network.mgr.PubSub.Sub(manage.GossipTypeName)
 		for data := range network.subChan {
 
 			msg, ok := data.(*queue.Message)

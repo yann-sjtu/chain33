@@ -15,8 +15,6 @@ import (
 
 	"github.com/33cn/chain33/common/log/log15"
 	"github.com/33cn/chain33/types"
-
-	proto "github.com/gogo/protobuf/proto"
 	core "github.com/libp2p/go-libp2p-core"
 	"github.com/libp2p/go-libp2p-core/peer"
 	protobufCodec "github.com/multiformats/go-multicodec/protobuf"
@@ -51,14 +49,11 @@ func RegisterStreamHandlerType(typeName, msgID string, handler StreamHandler) {
 	streamHandlerTypeMap[typeID] = handlerType
 }
 
-type StreamResponse struct {
-	data proto.Message
-}
-
-type StreamRequst struct {
+// StreamRequest stream request
+type StreamRequest struct {
 	PeerID  peer.ID
 	Host    core.Host
-	Data    proto.Message
+	Data    types.Message
 	ProtoID protocol.ID
 }
 
@@ -69,9 +64,9 @@ type StreamHandler interface {
 	// SetProtocol 初始化公共结构, 内部通过protocol获取外部依赖公共类, 如queue.client等
 	SetProtocol(protocol IProtocol)
 	// VerifyRequest  验证请求数据
-	VerifyRequest(message proto.Message, messageComm *types.MessageComm) bool
+	VerifyRequest(message types.Message, messageComm *types.MessageComm) bool
 	//SignMessage
-	SignProtoMessage(message proto.Message, host core.Host) ([]byte, error)
+	SignProtoMessage(message types.Message, host core.Host) ([]byte, error)
 	// Handle 处理请求
 	Handle(stream core.Stream)
 }
@@ -89,14 +84,13 @@ func (s *BaseStreamHandler) SetProtocol(protocol IProtocol) {
 
 // Handle handle stream
 func (s *BaseStreamHandler) Handle(core.Stream) {
-	return
 }
 
-func (s *BaseStreamHandler) SignProtoMessage(message proto.Message, host core.Host) ([]byte, error) {
+func (s *BaseStreamHandler) SignProtoMessage(message types.Message, host core.Host) ([]byte, error) {
 	return SignProtoMessage(message, host)
 }
 
-func (s *BaseStreamHandler) VerifyRequest(message proto.Message, messageComm *types.MessageComm) bool {
+func (s *BaseStreamHandler) VerifyRequest(message types.Message, messageComm *types.MessageComm) bool {
 	//基类统一验证数据, 不需要验证,重写该方法直接返回true
 
 	return AuthenticateMessage(message, messageComm)
@@ -117,7 +111,7 @@ func (s *BaseStreamHandler) HandleStream(stream core.Stream) {
 
 }
 
-func (s *BaseStreamHandler) StreamSendHandler(in *StreamRequst, result proto.Message) error {
+func (s *BaseStreamHandler) StreamSendHandler(in *StreamRequest, result types.Message) error {
 	stream, err := s.SendToStream(in.PeerID.Pretty(), in.Data, in.ProtoID, in.Host)
 	if err != nil {
 		return err
@@ -125,7 +119,7 @@ func (s *BaseStreamHandler) StreamSendHandler(in *StreamRequst, result proto.Mes
 	return s.ReadProtoMessage(result, stream)
 }
 
-func (s *BaseStreamHandler) SendToStream(pid string, data proto.Message, msgID protocol.ID, host core.Host) (core.Stream, error) {
+func (s *BaseStreamHandler) SendToStream(pid string, data types.Message, msgID protocol.ID, host core.Host) (core.Stream, error) {
 	rID, err := peer.IDB58Decode(pid)
 	if err != nil {
 		return nil, err
@@ -143,7 +137,7 @@ func (s *BaseStreamHandler) SendToStream(pid string, data proto.Message, msgID p
 	return stream, err
 }
 
-func (s *BaseStreamHandler) SendProtoMessage(data proto.Message, stream core.Stream) error {
+func (s *BaseStreamHandler) SendProtoMessage(data types.Message, stream core.Stream) error {
 	stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
 	writer := bufio.NewWriter(stream)
 	enc := protobufCodec.Multicodec(nil).Encoder(writer)
@@ -155,7 +149,7 @@ func (s *BaseStreamHandler) SendProtoMessage(data proto.Message, stream core.Str
 	return nil
 }
 
-func (s *BaseStreamHandler) ReadProtoMessage(data proto.Message, stream core.Stream) error {
+func (s *BaseStreamHandler) ReadProtoMessage(data types.Message, stream core.Stream) error {
 	stream.SetReadDeadline(time.Now().Add(30 * time.Second))
 	decoder := protobufCodec.Multicodec(nil).Decoder(bufio.NewReader(stream))
 	return decoder.Decode(data)

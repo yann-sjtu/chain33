@@ -121,19 +121,19 @@ func New(mgr *p2pmgr.P2PMgr, subCfg []byte) p2pmgr.IP2P {
 		subCfg:          mcfg,
 		p2pCfg:          p2pCfg,
 		client:          mgr.Client,
-		api:             mgr.SysApi,
-		discovery:       &dht.Discovery{},
+		api:             mgr.SysAPI,
 		addrBook:        addrbook,
 		mgr:             mgr,
 		taskGroup:       &sync.WaitGroup{},
 	}
 
+	p2p.discovery = dht.InitDhtDiscovery(p2p.host, p2p.addrBook.AddrsInfo(), p2p.subCfg, p2p.chainCfg.IsTestNet())
 	p2p.connManager = manage.NewConnManager(p2p.host, p2p.discovery, bandwidthTracker)
 	log.Info("NewP2p", "peerId", p2p.host.ID(), "addrs", p2p.host.Addrs())
 	return p2p
 }
 
-func newHost(port int32, priv p2pcrypto.PrivKey, bandwidthTracker *metrics.BandwidthCounter) core.Host {
+func newHost(port int32, priv p2pcrypto.PrivKey, bandwidthTracker metrics.Reporter) core.Host {
 	m, err := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", port))
 	if err != nil {
 		return nil
@@ -169,13 +169,12 @@ func (p *P2P) managePeers() {
 
 			return
 		}
-		select {
-		case <-time.After(time.Minute * 10):
-			//Reflesh addrBook
-			peersInfo := p.discovery.FindLocalPeers(p.connManager.FindNearestPeers())
-			p.addrBook.SaveAddr(peersInfo)
 
-		}
+		<-time.After(time.Minute * 10)
+		//Reflesh addrbook
+		peersInfo := p.discovery.FindLocalPeers(p.connManager.FindNearestPeers())
+		p.addrBook.SaveAddr(peersInfo)
+
 	}
 
 }
@@ -194,8 +193,6 @@ func (p *P2P) StartP2P() {
 		SubConfig:       p.subCfg,
 	}
 	protocol.Init(env)
-	//初始化dht列表需要优先执行, 否则放在协程中有先后秩序问题, 导致未初始化在其他协程中被使用
-	p.discovery.InitDht(p.host, p.addrBook.AddrsInfo(), p.subCfg, p.chainCfg.IsTestNet())
 	go p.managePeers()
 	go p.handleP2PEvent()
 	go p.findLANPeers()
