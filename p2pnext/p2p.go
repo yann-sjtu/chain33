@@ -7,8 +7,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/33cn/chain33/p2pnext/store"
-
 	"github.com/33cn/chain33/client"
 	logger "github.com/33cn/chain33/common/log/log15"
 	p2pmgr "github.com/33cn/chain33/p2p/manage"
@@ -16,7 +14,9 @@ import (
 	"github.com/33cn/chain33/p2pnext/dht"
 	"github.com/33cn/chain33/p2pnext/manage"
 	"github.com/33cn/chain33/p2pnext/protocol"
+	"github.com/33cn/chain33/p2pnext/protocol/p2pstore"
 	prototypes "github.com/33cn/chain33/p2pnext/protocol/types"
+	"github.com/33cn/chain33/p2pnext/store"
 	p2pty "github.com/33cn/chain33/p2pnext/types"
 	"github.com/33cn/chain33/queue"
 	"github.com/33cn/chain33/types"
@@ -50,56 +50,9 @@ type P2P struct {
 	mgr             *p2pmgr.P2PMgr
 	subChan         chan interface{}
 	db              ds.Datastore
+
+	env *protocol.P2PEnv
 }
-
-// 定义方法用于满足接口实现
-func (p *P2P) ChainConfig() *types.Chain33Config {
-	return p.chainCfg
-}
-
-func (p *P2P) Host() core.Host {
-	return p.host
-}
-
-func (p *P2P) Discovery() *dht.Discovery {
-	return p.discovery
-}
-
-func (p *P2P) ConnMgr() *manage.ConnManager {
-	return p.connManager
-}
-
-func (p *P2P) PeerInfoMgr() *manage.PeerInfoManager {
-	return p.peerInfoManager
-}
-
-func (p *P2P) API() client.QueueProtocolAPI {
-	return p.api
-}
-
-func (p *P2P) Client() queue.Client {
-	return p.client
-}
-
-func (p *P2P) AddrBook() *addrbook.AddrBook {
-	return p.addrBook
-}
-
-func (p *P2P) P2PConfig() *types.P2P {
-	return p.p2pCfg
-}
-
-func (p *P2P) SubConfig() *p2pty.P2PSubConfig {
-	return p.subCfg
-}
-
-func (p *P2P) DB() ds.Datastore {
-	return p.db
-}
-
-//。。。。。。
-
-//TODO 实现所有获取P2P字段的接口
 
 func New(mgr *p2pmgr.P2PMgr, subCfg []byte) p2pmgr.IP2P {
 
@@ -194,7 +147,25 @@ func (p *P2P) StartP2P() {
 		P2PManager:      p.mgr,
 		SubConfig:       p.subCfg,
 	}
+
 	protocol.Init(env)
+
+	//debug new
+	env2 := &protocol.P2PEnv{
+		ChainCfg:        p.chainCfg,
+		QueueClient:     p.client,
+		Host:            p.host,
+		ConnManager:     p.connManager,
+		Discovery:       p.discovery,
+		PeerInfoManager: p.peerInfoManager,
+		P2PManager:      p.mgr,
+		SubConfig:       p.subCfg,
+		DB:              p.db,
+	}
+	p.env = env2
+	p2pstore.Init(env2)
+
+	//new
 	go p.managePeers()
 	go p.handleP2PEvent()
 	go p.findLANPeers()

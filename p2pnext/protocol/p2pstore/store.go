@@ -39,13 +39,13 @@ func (s *StoreProtocol) SaveBlocks(blocks []*types.Block) error {
 	//TODO 多次递归查询更大范围内最近de节点
 	//TODO 目前返回20个，可以duo返回几个
 	ctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
-	peerCh, err := s.Discovery().Routing().GetClosestPeers(ctx, hash)
+	peerCh, err := s.Discovery.Routing().GetClosestPeers(ctx, hash)
 	if err != nil {
 		return err
 	}
 	for peer := range peerCh {
 		ctx, _ := context.WithTimeout(context.Background(), 5*time.Minute)
-		stream, err := s.Host().NewStream(ctx, peer, PutData)
+		stream, err := s.Host.NewStream(ctx, peer, PutData)
 		if err != nil {
 			//TODO +log
 			continue
@@ -71,7 +71,7 @@ func (s *StoreProtocol) GetBlocksByIndexHash(param *types2.FetchBlocks) ([]*type
 		return nil, ErrInvalidHash
 	}
 
-	b, err := s.DB().Get(datastore.NewKey(param.Hash))
+	b, err := s.DB.Get(datastore.NewKey(param.Hash))
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +81,7 @@ func (s *StoreProtocol) GetBlocksByIndexHash(param *types2.FetchBlocks) ([]*type
 
 	//本地不存在，则向临近节点查询
 	//首先从本地路由表获取 *3* 个最近的节点
-	peers := s.Discovery().Routing().RoutingTable().NearestPeers(kbt.ConvertKey(param.Hash), 3)
+	peers := s.Discovery.Routing().RoutingTable().NearestPeers(kbt.ConvertKey(param.Hash), 3)
 	responseCh := make(chan protocol2.Response, AlphaValue)
 	cancelCtx, cancelFunc := context.WithCancel(context.Background())
 	//递归查询，直到查询到数据
@@ -121,7 +121,7 @@ func (s *StoreProtocol) Republish() error {
 	}
 
 	for hash := range hashMap {
-		value, err := s.DB().Get(datastore.NewKey(hash))
+		value, err := s.DB.Get(datastore.NewKey(hash))
 		if err != nil {
 			//TODO +log
 			continue
@@ -154,7 +154,7 @@ func (s *StoreProtocol) AddLocalIndexHash(hash string) error {
 		return err
 	}
 
-	return s.DB().Put(datastore.NewKey(LocalIndexHashListKey), value)
+	return s.DB.Put(datastore.NewKey(LocalIndexHashListKey), value)
 }
 
 func (s *StoreProtocol) DeleteLocalIndexHash(hash string) error {
@@ -169,11 +169,11 @@ func (s *StoreProtocol) DeleteLocalIndexHash(hash string) error {
 		return err
 	}
 
-	return s.DB().Put(datastore.NewKey(LocalIndexHashListKey), value)
+	return s.DB.Put(datastore.NewKey(LocalIndexHashListKey), value)
 }
 
 func (s *StoreProtocol) GetLocalIndexHash() (map[string]struct{}, error) {
-	value, err := s.DB().Get(datastore.NewKey(LocalIndexHashListKey))
+	value, err := s.DB.Get(datastore.NewKey(LocalIndexHashListKey))
 	if err != nil {
 		return nil, err
 	}

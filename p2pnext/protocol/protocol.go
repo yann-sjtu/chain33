@@ -1,8 +1,7 @@
 package protocol
 
 import (
-	"github.com/33cn/chain33/client"
-	"github.com/33cn/chain33/p2pnext/addrbook"
+	manage2 "github.com/33cn/chain33/p2p/manage"
 	"github.com/33cn/chain33/p2pnext/dht"
 	"github.com/33cn/chain33/p2pnext/manage"
 	p2pty "github.com/33cn/chain33/p2pnext/types"
@@ -15,8 +14,6 @@ import (
 
 // Protocol 所有协议实现都必须实现的接口
 type Protocol interface {
-	// ProtocolIDs 返回所有协议id
-	//ProtocolIDs() []protocol.ID
 
 	// VerifyRequest  验证请求数据
 	VerifyRequest(message proto.Message, messageComm *types.MessageComm) bool
@@ -60,16 +57,15 @@ type Response struct {
 	Error  error
 }
 
-//Global 协议实现中通过该接口获取全局变量
-type Global interface {
-	Config() *types.Chain33Config
-	Host() core.Host
-	Discovery() *dht.Discovery
-	ConnMgr() *manage.ConnManager
-	PeerInfoMgr() *manage.PeerInfoManager
-	API() client.QueueProtocolAPI
-	AddrBook() *addrbook.AddrBook
-	P2PConfig() *types.P2P
-	SubConfig() *p2pty.P2PSubConfig
-	DB() ds.Datastore
+// P2PEnv p2p全局公共变量
+type P2PEnv struct {
+	ChainCfg        *types.Chain33Config
+	QueueClient     queue.Client
+	Host            core.Host
+	ConnManager     *manage.ConnManager
+	PeerInfoManager *manage.PeerInfoManager
+	Discovery       *dht.Discovery
+	P2PManager      *manage2.P2PMgr
+	SubConfig       *p2pty.P2PSubConfig
+	DB              ds.Datastore
 }

@@ -11,14 +11,11 @@ import (
 	types2 "github.com/33cn/chain33/p2pnext/types"
 	"github.com/33cn/chain33/queue"
 	"github.com/33cn/chain33/types"
-	ggio "github.com/gogo/protobuf/io"
 	"github.com/gogo/protobuf/proto"
 	"github.com/ipfs/go-datastore"
 	core "github.com/libp2p/go-libp2p-core"
-	"github.com/libp2p/go-libp2p-core/helpers"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/libp2p/go-libp2p-core/protocol"
 	kbt "github.com/libp2p/go-libp2p-kbucket"
 )
 
@@ -29,17 +26,19 @@ const (
 
 type StoreProtocol struct {
 	protocol2.BaseProtocol //default协议实现
-	protocol2.Global       //获取全局变量接口
+	*protocol2.P2PEnv      //协议共享接口变量
 }
 
-func New(global protocol2.Global) protocol2.Protocol {
+func Init(env *protocol2.P2PEnv) {
 	p := &StoreProtocol{
-		Global: global,
+		P2PEnv: env,
 	}
+
+	p.Host.SetStreamHandler(PutData, p.Handle)
+	p.Host.SetStreamHandler(FetchData, p.Handle)
 	//实例化之后同时注册eventHandler
 	//TODO evnetID修改为真实的
 	protocol2.RegisterEventHandler(0, p.HandleEvent)
-	return p
 }
 
 // Handle 处理节点之间的请求
@@ -87,30 +86,35 @@ func (s *StoreProtocol) Handle(stream core.Stream) {
 
 // HandleEvent 处理模块之间的事件
 func (s *StoreProtocol) HandleEvent(m *queue.Message) {
-
+	switch m.Ty {
+	case 1:
+		_ = s.SaveBlocks(nil)
+	case 2:
+		_, _ = s.GetBlocksByIndexHash(nil)
+	}
 }
 
 // Request 向指定节点发送请求
 // TODO 放到host目录下
-func (s *StoreProtocol) Request(id peer.ID, p protocol.ID, data proto.Message) error {
-	stream, err := s.Host().NewStream(context.Background(), id, p)
-	if err != nil {
-		return err
-	}
-	writer := ggio.NewFullWriter(stream)
-	err = writer.WriteMsg(data)
-	if err != nil {
-		_ = stream.Reset()
-		return err
-	}
-
-	err = helpers.FullClose(stream)
-	if err != nil {
-		_ = stream.Reset()
-		return err
-	}
-	return nil
-}
+//func (s *StoreProtocol) Request(id peer.ID, p protocol.ID, data proto.Message) error {
+//	stream, err := s.Host.NewStream(context.Background(), id, p)
+//	if err != nil {
+//		return err
+//	}
+//	writer := ggio.NewFullWriter(stream)
+//	err = writer.WriteMsg(data)
+//	if err != nil {
+//		_ = stream.Reset()
+//		return err
+//	}
+//
+//	err = helpers.FullClose(stream)
+//	if err != nil {
+//		_ = stream.Reset()
+//		return err
+//	}
+//	return nil
+//}
 
 // VerifyRequest  验证请求数据
 func (s *StoreProtocol) VerifyRequest(message proto.Message, messageComm *types.MessageComm) bool {
@@ -139,8 +143,8 @@ func (s *StoreProtocol) onFetchData(stream core.Stream, in interface{}) {
 		return
 	}
 
-	if ok, _ := s.DB().Has(datastore.NewKey(data.Hash)); ok {
-		b, err := s.DB().Get(datastore.NewKey(data.Hash))
+	if ok, _ := s.DB.Has(datastore.NewKey(data.Hash)); ok {
+		b, err := s.DB.Get(datastore.NewKey(data.Hash))
 		if err != nil {
 			res.Error = err
 			return
@@ -164,7 +168,7 @@ func (s *StoreProtocol) onFetchData(stream core.Stream, in interface{}) {
 		}
 		return
 	}
-	peers := s.Discovery().Routing().RoutingTable().NearestPeers(kbt.ConvertPeerID(s.Host().ID()), AlphaValue)
+	peers := s.Discovery.Routing().RoutingTable().NearestPeers(kbt.ConvertPeerID(s.Host.ID()), AlphaValue)
 	res.Result = peers
 	return
 
@@ -195,7 +199,7 @@ func (s *StoreProtocol) onPutData(stream core.Stream, in interface{}) {
 		res.Error = err
 		return
 	}
-	err = s.DB().Put(datastore.NewKey(data.Hash), b)
+	err = s.DB.Put(datastore.NewKey(data.Hash), b)
 	if err != nil {
 		res.Error = err
 		return
@@ -203,7 +207,7 @@ func (s *StoreProtocol) onPutData(stream core.Stream, in interface{}) {
 	err = s.AddLocalIndexHash(data.Hash)
 	if err != nil {
 		//索引存储失败，存储的区块也要回滚
-		_ = s.DB().Delete(datastore.NewKey(BlocksNameSpace + data.Hash))
+		_ = s.DB.Delete(datastore.NewKey(data.Hash))
 		res.Error = err
 		return
 	}
@@ -211,7 +215,7 @@ func (s *StoreProtocol) onPutData(stream core.Stream, in interface{}) {
 
 func (s *StoreProtocol) getBlocksFromRemote(ctx context.Context, params *types2.FetchBlocks, pid peer.ID, ch chan<- protocol2.Response) {
 	childCtx, _ := context.WithTimeout(ctx, 3*time.Minute)
-	stream, err := s.Host().NewStream(childCtx, pid, FetchData)
+	stream, err := s.Host.NewStream(childCtx, pid, FetchData)
 	if err != nil {
 		//TODO +log
 		return
@@ -228,6 +232,7 @@ func (s *StoreProtocol) getBlocksFromRemote(ctx context.Context, params *types2.
 	res, _ := readResponse(stream)
 	ch <- res
 }
+
 func readResponse(stream network.Stream) (protocol2.Response, error) {
 	var data []byte
 	var err error

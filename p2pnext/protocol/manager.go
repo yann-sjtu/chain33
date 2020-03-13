@@ -7,14 +7,14 @@ import (
 	"github.com/33cn/chain33/queue"
 )
 
-//type Creator func(host Global) Protocol
+//type Creator func(env *P2PEnv) Protocol
 //
 //var (
 //	protocolMap   = make(map[protocol.ID]Creator)
 //	protocolMutex sync.RWMutex
 //)
 //
-//func Register(id protocol.ID, f func(global Global) Protocol) {
+//func Register(id protocol.ID, f func(env *P2PEnv) Protocol) {
 //	protocolMutex.Lock()
 //	defer protocolMutex.Unlock()
 //	if _, ok := protocolMap[id]; ok {
@@ -23,21 +23,12 @@ import (
 //	protocolMap[id] = f
 //}
 //
-//func Load(id protocol.ID) Creator {
+//func InitProtocol(env *P2PEnv) {
 //	protocolMutex.RLock()
 //	defer protocolMutex.RUnlock()
-//	return protocolMap[id]
-//}
-//
-//func FetchAll() map[protocol.ID]Creator {
-//	protocolMutex.RLock()
-//	defer protocolMutex.RUnlock()
-//	//返回一个protocolMap的副本，防止外部修改
-//	m := make(map[protocol.ID]Creator)
-//	for id, p := range protocolMap {
-//		m[id] = p
+//	for _, creator := range protocolMap {
+//		creator(env)
 //	}
-//	return m
 //}
 
 // EventHandler handle chain33 event
@@ -71,8 +62,8 @@ func GetEventHandler(eventID int64) (EventHandler, bool) {
 }
 
 // ClearEventHandler clear event handler map
-func ClearEventHandler() {
-	eventHandlerMutex.RLock()
-	defer eventHandlerMutex.RUnlock()
-	eventHandlerMap = make(map[int64]EventHandler)
-}
+//func ClearEventHandler() {
+//	eventHandlerMutex.RLock()
+//	defer eventHandlerMutex.RUnlock()
+//	eventHandlerMap = make(map[int64]EventHandler)
+//}
