@@ -44,19 +44,6 @@ func (b BaseProtocol) Handle(stream core.Stream) {}
 // HandleEvent 处理模块之间的事件
 func (b BaseProtocol) HandleEvent(m *queue.Message) {}
 
-//Message 协议传递时统一消息类型
-// Protocol指定具体协议
-// Data是消息体
-type Message struct {
-	ProtocolID string
-	Params     interface{}
-}
-
-type Response struct {
-	Result interface{}
-	Error  error
-}
-
 // P2PEnv p2p全局公共变量
 type P2PEnv struct {
 	ChainCfg        *types.Chain33Config

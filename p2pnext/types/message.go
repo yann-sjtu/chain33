@@ -2,23 +2,35 @@ package types
 
 import (
 	"errors"
-
-	"github.com/33cn/chain33/types"
+	"time"
 )
 
-//按区间查询区块
-type FetchBlocks struct {
-	Hash   string
-	Start  int64
-	End    int64
-	Filter bool
+//Message 协议传递时统一消息类型
+// Protocol指定具体协议
+// Data是消息体
+type Message struct {
+	ProtocolID string
+	Params     interface{}
 }
 
-type PutPackage struct {
-	Hash   string
-	Blocks []*types.Block
+type Response struct {
+	Result interface{}
+	Error  error
+}
+
+type StorageData struct {
+	Data        interface{}
+	RefreshTime time.Time
 }
 
 var (
-	ErrParams = errors.New("wrong parameter")
+	ErrLength             = errors.New("length not equal")
+	ErrProtocolNotSupport = errors.New("protocol not support")
+	ErrNotFound           = errors.New("not found")
+	ErrInvalidParam       = errors.New("invalid parameter")
+	ErrUnexpected         = errors.New("unexpected error")
+	ErrDBSave             = errors.New("save data to DB error")
+
+	ExpiredTime     = time.Hour * 24
+	RefreshInterval = time.Hour * 4
 )
