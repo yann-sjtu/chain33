@@ -83,6 +83,7 @@ func (s *StoreProtocol) GetChunk(param *types.ReqChunkBlockBody) (*types.BlockBo
 		return nil, types2.ErrInvalidParam
 	}
 
+	//优先获取本地数据
 	data, err := s.DB.Get(genChunkKey(param.ChunkHash))
 	if err == nil {
 		var sData types2.StorageData
@@ -90,6 +91,7 @@ func (s *StoreProtocol) GetChunk(param *types.ReqChunkBlockBody) (*types.BlockBo
 		if err != nil {
 			return nil, err
 		}
+		//本地数据没有过期则返回本地数据
 		if time.Since(sData.RefreshTime) < types2.ExpiredTime {
 			blocks := sData.Data.(*types.BlockBodys)
 			if param.Filter {
@@ -103,15 +105,16 @@ func (s *StoreProtocol) GetChunk(param *types.ReqChunkBlockBody) (*types.BlockBo
 			}
 			return blocks, nil
 		}
+		//本地数据过期则删除本地数据
 		err = s.deleteChunkBlock(param.ChunkHash)
 		if err != nil {
 			log.Error("GetChunk", "delete chunk error", err)
 		}
 	}
 
-	//本地不存在，则向临近节点查询
+	//本地数据不存在或已过期，则向临近节点查询
 	//首先从本地路由表获取 *3* 个最近的节点
-	peers := s.Discovery.Routing().RoutingTable().NearestPeers(kbt.ConvertKey(genChunkPath(param.ChunkHash)), 3)
+	peers := s.Discovery.Routing().RoutingTable().NearestPeers(kbt.ConvertKey(genChunkPath(param.ChunkHash)), AlphaValue)
 	//递归查询时间上限一小时
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 	defer cancel()

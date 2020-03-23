@@ -119,22 +119,23 @@ func (s *StoreProtocol) fetchChunkOrNearerPeersAsync(ctx context.Context, param 
 	}
 
 	var peerList []peer.ID
-	for res := range responseCh {
+	for range peers {
+		res := <-responseCh
 		if res == nil || res.Error != nil {
 			continue
 		}
-		//没查到区块数据，返回了更近的节点信息，继续迭代查询
-		if newPeers, ok := res.Result.([]peer.ID); ok {
-			peerList = append(peerList, newPeers...)
-			continue
-		}
-		//查到了区块数据，直接返回
-		if bodys, ok := res.Result.(*types.BlockBodys); ok {
-			return bodys
-		}
+		switch t := res.Result.(type) {
+		case *types.BlockBodys:
+			//查到了区块数据，直接返回
+			return t
+		case []peer.ID:
+			//没查到区块数据，返回了更近的节点信息
+			peerList = append(peerList, t...)
+		default:
+			//返回类型不是*types.BlockBodys或[]peer.ID，对端节点异常
+			log.Error("fetchChunkAsync", "fetchChunkOrNearerPeers invalid response", res.Result)
 
-		//返回类型不是*types.BlockBodys或[]peer.ID，对端节点异常
-		log.Error("fetchChunkAsync", "fetchChunkOrNearerPeers invalid response", res.Result)
+		}
 	}
 
 	//TODO 若超过3个，排序选择最优的三个节点
