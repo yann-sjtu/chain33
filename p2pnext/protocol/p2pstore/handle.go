@@ -20,8 +20,6 @@ const (
 	StoreChunk     = "/chain33/store-chunk/1.0.0"
 	GetHeader      = "/chain33/headers/1.0.0"
 	GetChunkRecord = "/chain33/chunk-record/1.0.0"
-
-	//BroadcastChunkRecord = "/chain33/broadcast-chunk-record/1.0.0"
 )
 
 type StoreProtocol struct {
@@ -217,7 +215,6 @@ func (s *StoreProtocol) onFetchChunk(stream core.Stream, in interface{}) {
 	//本地没有数据或本地数据已过期
 	peers := s.Discovery.Routing().RoutingTable().NearestPeers(kbt.ConvertPeerID(s.Host.ID()), AlphaValue)
 	res.Result = peers
-	return
 
 }
 
@@ -252,7 +249,7 @@ func (s *StoreProtocol) onStoreChunk(stream core.Stream, in interface{}) {
 	if err == nil {
 		//本节点p2pStore已有数据
 		var data types2.StorageData
-		err = json.Unmarshal(b, data)
+		err = json.Unmarshal(b, &data)
 		if err != nil {
 			log.Error("onStoreChunk", "unmarshal error", err)
 			res.Error = types2.ErrUnexpected
@@ -337,7 +334,6 @@ func (s *StoreProtocol) onGetHeader(stream core.Stream, in interface{}) {
 		return
 	}
 	res.Result = resp.GetData()
-	return
 }
 
 func (s *StoreProtocol) onGetChunkRecord(stream core.Stream, in interface{}) {
@@ -367,7 +363,6 @@ func (s *StoreProtocol) onGetChunkRecord(stream core.Stream, in interface{}) {
 		return
 	}
 	res.Result = resp.GetData()
-	return
 }
 
 func (s *StoreProtocol) getChunkFromBlockchain(param interface{}) (*types.BlockBodys, error) {
@@ -383,49 +378,3 @@ func (s *StoreProtocol) getChunkFromBlockchain(param interface{}) (*types.BlockB
 	return resp.GetData().(*types.BlockBodys), nil
 
 }
-
-//func (s *StoreProtocol) BroadcastRecord(req *types.NotifyArchiveChunk) {
-//	var peers []peer.ID
-//	//节点选择：
-//	// 1.选择每个k桶的第一个节点，直到满50个
-//	// 2.若k桶不足50个，则加入所有k桶的第一个节点之后，从第一个k桶开始依次添加节点，直到满50个节点
-//	// 3.若所有k桶的节点数总和不足50，则选择所有节点
-//	buckets := s.Discovery.Routing().RoutingTable().GetAllBuckets()
-//	for _, bucket := range buckets {
-//		if bucket.Len() != 0 {
-//			peers = append(peers, bucket.Peers()[0])
-//		}
-//	}
-//	var n int
-//	for len(peers) < types2.BroadcastCount && n < len(buckets) {
-//		bucket := buckets[n]
-//		n++
-//		if bucket.Len() == 0 {
-//			continue
-//		}
-//		for _, pid := range bucket.Peers()[1:] {
-//			peers = append(peers, pid)
-//		}
-//	}
-//	if len(peers) > types2.BroadcastCount {
-//		peers = peers[:types2.BroadcastCount]
-//	}
-//
-//	for _, pid := range peers {
-//		ctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
-//		stream, err := s.Host.NewStream(ctx, pid, BroadcastChunkRecord)
-//		if err != nil {
-//			log.Error("new stream error when broadcast record", "peer id", pid, "error", err)
-//			continue
-//		}
-//		msg := types2.Message{
-//			ProtocolID: BroadcastChunkRecord,
-//			Params:     chunk,
-//		}
-//		rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
-//		b, _ := json.Marshal(msg)
-//		rw.Write(b)
-//		rw.Flush()
-//		stream.Close()
-//	}
-//}
