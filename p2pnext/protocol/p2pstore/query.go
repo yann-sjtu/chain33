@@ -11,7 +11,6 @@ import (
 	"github.com/33cn/chain33/types"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
-	kbt "github.com/libp2p/go-libp2p-kbucket"
 )
 
 func (s *StoreProtocol) getHeaders(param *types.ReqBlockHeaders) []*types.Header {
@@ -70,50 +69,49 @@ func (s *StoreProtocol) getChunkRecords(param *types.ReqChunkRecords) *types.Chu
 	return nil
 }
 
-func (s *StoreProtocol) fetchChunkAsync(param *types.ReqChunkBlockBody) (*types.BlockBodys, error) {
-	//首先从本地路由表获取 *3* 个最近的节点
-	peers := s.Discovery.Routing().RoutingTable().NearestPeers(kbt.ConvertKey(genChunkPath(param.ChunkHash)), 3)
-	start := time.Now()
-	for {
-		//递归查询时间上限一小时
-		if time.Since(start) > time.Hour {
-			break
+// fetchChunkOrNearerPeersAsync 返回 *types.ChunkBlockBody 或者 []peer.ID
+func (s *StoreProtocol) fetchChunkOrNearerPeersAsync(ctx context.Context, param *types.ReqChunkBlockBody, peers []peer.ID) interface{} {
+
+	responseCh := make(chan *types2.Response, AlphaValue)
+	cancelCtx, cancelFunc := context.WithCancel(ctx)
+	defer cancelFunc()
+	// *3* 个节点并发请求
+	for _, peerID := range peers {
+		go func(pid peer.ID) {
+			responseCh <- s.fetchChunkOrNearerPeers(cancelCtx, param, pid)
+		}(peerID)
+	}
+
+	var peerList []peer.ID
+	for res := range responseCh {
+		if res == nil || res.Error != nil {
+			continue
 		}
-		responseCh := make(chan *types2.Response, AlphaValue)
-		cancelCtx, cancelFunc := context.WithCancel(context.Background())
-		// *3* 个节点并发请求
-		for _, peerID := range peers {
-			go func(pid peer.ID) {
-				responseCh <- s.fetchChunkOrNearerPeers(cancelCtx, param, pid)
-			}(peerID)
+		//没查到区块数据，返回了更近的节点信息，继续迭代查询
+		if newPeers, ok := res.Result.([]peer.ID); ok {
+			peerList = append(peerList, newPeers...)
+			continue
+		}
+		//查到了区块数据，直接返回
+		if bodys, ok := res.Result.(*types.BlockBodys); ok {
+			return bodys
 		}
 
-		for res := range responseCh {
-			if res == nil || res.Error != nil {
-				continue
-			}
-			//查到了区块数据，直接返回
-			if bodys, ok := res.Result.(*types.BlockBodys); ok {
-				//三个并发请求任意一个正常返回时，cancel掉另外两个
-				cancelFunc()
-				return bodys, nil
-			}
-			//没查到区块数据，返回了更近的节点信息，继续迭代查询
-			var ok bool
-			if peers, ok = res.Result.([]peer.ID); ok {
-				//三个并发请求任意一个正常返回时，cancel掉另外两个
-				cancelFunc()
-				break
-			}
-			//返回类型不是*types.BlockBodys或[]peer.ID，对端节点异常
-			log.Error("fetchChunkAsync", "fetchChunkOrNearerPeers invalid response", res.Result)
-		}
+		//返回类型不是*types.BlockBodys或[]peer.ID，对端节点异常
+		log.Error("fetchChunkAsync", "fetchChunkOrNearerPeers invalid response", res.Result)
 	}
-	return nil, types2.ErrNotFound
+
+	//TODO 若超过3个，排序选择最优的三个节点
+	if len(peerList) > AlphaValue {
+		peerList = peerList[:AlphaValue]
+	}
+
+	return peerList
 }
 
 func (s *StoreProtocol) fetchChunkOrNearerPeers(ctx context.Context, params *types.ReqChunkBlockBody, pid peer.ID) *types2.Response {
-	childCtx, _ := context.WithTimeout(ctx, 10*time.Minute)
+	childCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
 	stream, err := s.Host.NewStream(childCtx, pid, FetchChunk)
 	if err != nil {
 		log.Error("getBlocksFromRemote", "error", err)

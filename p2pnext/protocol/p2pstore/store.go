@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/libp2p/go-libp2p-core/peer"
+	kbt "github.com/libp2p/go-libp2p-kbucket"
+
 	"github.com/33cn/chain33/common/log/log15"
 	types2 "github.com/33cn/chain33/p2pnext/types"
 	"github.com/33cn/chain33/types"
@@ -27,27 +30,50 @@ var (
 func (s *StoreProtocol) StoreChunk(req *types.ChunkInfo) error {
 	//TODO 多次递归查询更大范围内最近的节点
 	//TODO 目前返回20个，可以多返回几个
-	ctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	peerCh, err := s.Discovery.Routing().GetClosestPeers(ctx, genChunkPath(req.ChunkHash))
 	if err != nil {
 		return err
 	}
 	for pid := range peerCh {
-		ctx, _ := context.WithTimeout(context.Background(), 5*time.Minute)
-		stream, err := s.Host.NewStream(ctx, pid, StoreChunk)
+		err = s.storeChunkOnPeer(req, pid)
 		if err != nil {
 			log.Error("new stream error when store chunk", "peer id", pid, "error", err)
 			continue
 		}
-		msg := types2.Message{
-			ProtocolID: StoreChunk,
-			Params:     req,
-		}
-		rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
-		b, _ := json.Marshal(msg)
-		rw.Write(b)
-		rw.Flush()
-		stream.Close()
+	}
+	return nil
+}
+
+func (s *StoreProtocol) storeChunkOnPeer(req *types.ChunkInfo, pid peer.ID) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	stream, err := s.Host.NewStream(ctx, pid, StoreChunk)
+	if err != nil {
+		log.Error("new stream error when store chunk", "peer id", pid, "error", err)
+		return err
+	}
+	msg := types2.Message{
+		ProtocolID: StoreChunk,
+		Params:     req,
+	}
+	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
+	b, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	_, err = rw.Write(b)
+	if err != nil {
+		return err
+	}
+	err = rw.Flush()
+	if err != nil {
+		return err
+	}
+	err = stream.Close()
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -84,7 +110,23 @@ func (s *StoreProtocol) GetChunk(param *types.ReqChunkBlockBody) (*types.BlockBo
 	}
 
 	//本地不存在，则向临近节点查询
-	return s.fetchChunkAsync(param)
+	//首先从本地路由表获取 *3* 个最近的节点
+	peers := s.Discovery.Routing().RoutingTable().NearestPeers(kbt.ConvertKey(genChunkPath(param.ChunkHash)), 3)
+	//递归查询时间上限一小时
+	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+	defer cancel()
+	for {
+		res := s.fetchChunkOrNearerPeersAsync(ctx, param, peers)
+		if bodys, ok := res.(*types.BlockBodys); ok {
+			return bodys, nil
+		}
+		//若len(peerList) == 0则该类型断言为false，说明找不到更近的节点了
+		var ok bool
+		if peers, ok = res.([]peer.ID); !ok {
+			break
+		}
+	}
+	return nil, types2.ErrNotFound
 }
 
 func (s *StoreProtocol) deleteChunkBlock(hash []byte) error {
