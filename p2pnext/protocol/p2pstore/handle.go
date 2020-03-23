@@ -52,7 +52,7 @@ func (s *StoreProtocol) Handle(stream core.Stream) {
 	msg, err := readMessage(stream)
 	if err != nil {
 		log.Error("handle", "unmarshal error", err)
-		stream.Reset()
+		_ = stream.Reset()
 		return
 	}
 
@@ -167,7 +167,10 @@ func (s *StoreProtocol) onFetchChunk(stream core.Stream, in interface{}) {
 	var res types2.Response
 	defer func() {
 		b, _ := json.Marshal(res)
-		rw.Write(b)
+		_, err := rw.Write(b)
+		if err != nil {
+			log.Error("onFetchChunk", "stream write error", err)
+		}
 		rw.Flush()
 	}()
 	req, ok := in.(*types.ReqChunkBlockBody)
@@ -234,7 +237,10 @@ func (s *StoreProtocol) onStoreChunk(stream core.Stream, in interface{}) {
 	var res types2.Response
 	defer func() {
 		b, _ := json.Marshal(res)
-		rw.Write(b)
+		_, err := rw.Write(b)
+		if err != nil {
+			log.Error("onStoreChunk", "stream write error", err)
+		}
 		rw.Flush()
 	}()
 	req, ok := in.(*types.ChunkInfo)
@@ -314,7 +320,10 @@ func (s *StoreProtocol) onGetHeader(stream core.Stream, in interface{}) {
 	var res types2.Response
 	defer func() {
 		b, _ := json.Marshal(res)
-		rw.Write(b)
+		_, err := rw.Write(b)
+		if err != nil {
+			log.Error("onGetHeader", "stream write error", err)
+		}
 		rw.Flush()
 	}()
 	req, ok := in.(*types.ReqBlockHeaders)
@@ -342,7 +351,10 @@ func (s *StoreProtocol) onGetChunkRecord(stream core.Stream, in interface{}) {
 	var res types2.Response
 	defer func() {
 		b, _ := json.Marshal(res)
-		rw.Write(b)
+		_, err := rw.Write(b)
+		if err != nil {
+			log.Error("onGetChunkRecord", "stream write error", err)
+		}
 		rw.Flush()
 	}()
 	req, ok := in.(*types.ReqChunkRecords)

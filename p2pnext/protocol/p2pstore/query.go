@@ -15,25 +15,11 @@ import (
 
 func (s *StoreProtocol) getHeaders(param *types.ReqBlockHeaders) []*types.Header {
 	for _, pid := range s.Discovery.RoutingTale() {
-		childCtx, _ := context.WithTimeout(context.Background(), 30*time.Second)
-		stream, err := s.Host.NewStream(childCtx, pid, GetHeader)
+		headers, err := s.getHeadersFromPeer(param, pid)
 		if err != nil {
+			log.Error("getChunkRecords", "peer", pid, "error", err)
 			continue
 		}
-		msg := types2.Message{
-			ProtocolID: GetHeader,
-			Params:     param,
-		}
-		rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
-		b, _ := json.Marshal(msg)
-		rw.Write(b)
-		rw.Flush()
-		res, err := readResponse(stream)
-		stream.Close()
-		if err != nil {
-			continue
-		}
-		headers := res.Result.([]*types.Header)
 		return headers
 	}
 
@@ -41,32 +27,82 @@ func (s *StoreProtocol) getHeaders(param *types.ReqBlockHeaders) []*types.Header
 	return nil
 }
 
+func (s *StoreProtocol) getHeadersFromPeer(param *types.ReqBlockHeaders, pid peer.ID) ([]*types.Header, error) {
+	childCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	stream, err := s.Host.NewStream(childCtx, pid, GetHeader)
+	if err != nil {
+		return nil, err
+	}
+	msg := types2.Message{
+		ProtocolID: GetHeader,
+		Params:     param,
+	}
+	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
+	b, _ := json.Marshal(msg)
+	_, err = rw.Write(b)
+	if err != nil {
+		log.Error("getHeadersFromPeer", "stream write error", err)
+		return nil, err
+	}
+	rw.Flush()
+	stream.Close()
+	//close之后不能写数据，但依然可以读数据
+	res, err := readResponse(stream)
+	if err != nil {
+		return nil, err
+	}
+	headers, ok := res.Result.([]*types.Header)
+	if !ok {
+		return nil, types2.ErrInvalidResponse
+	}
+	return headers, nil
+}
+
 func (s *StoreProtocol) getChunkRecords(param *types.ReqChunkRecords) *types.ChunkRecords {
 	for _, pid := range s.Discovery.RoutingTale() {
-		childCtx, _ := context.WithTimeout(context.Background(), 30*time.Second)
-		stream, err := s.Host.NewStream(childCtx, pid, GetChunkRecord)
+		records, err := s.getChunkRecordsFromPeer(param, pid)
 		if err != nil {
+			log.Error("getChunkRecords", "peer", pid, "error", err)
 			continue
 		}
-		msg := types2.Message{
-			ProtocolID: GetChunkRecord,
-			Params:     param,
-		}
-		rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
-		b, _ := json.Marshal(msg)
-		rw.Write(b)
-		rw.Flush()
-		res, err := readResponse(stream)
-		stream.Close()
-		if err != nil {
-			continue
-		}
-		records := res.Result.(*types.ChunkRecords)
 		return records
 	}
 
 	log.Error("getChunkRecords", "error", types2.ErrNotFound)
 	return nil
+}
+
+func (s *StoreProtocol) getChunkRecordsFromPeer(param *types.ReqChunkRecords, pid peer.ID) (*types.ChunkRecords, error) {
+	childCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	stream, err := s.Host.NewStream(childCtx, pid, GetChunkRecord)
+	if err != nil {
+		return nil, err
+	}
+	msg := types2.Message{
+		ProtocolID: GetChunkRecord,
+		Params:     param,
+	}
+	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
+	b, _ := json.Marshal(msg)
+	_, err = rw.Write(b)
+	if err != nil {
+		log.Error("getChunkRecordsFromPeer", "stream write error", err)
+		return nil, err
+	}
+	rw.Flush()
+	//close之后不能写数据，但依然可以读数据
+	stream.Close()
+	res, err := readResponse(stream)
+	if err != nil {
+		return nil, err
+	}
+	records, ok := res.Result.(*types.ChunkRecords)
+	if !ok {
+		return nil, types2.ErrInvalidResponse
+	}
+	return records, nil
 }
 
 // fetchChunkOrNearerPeersAsync 返回 *types.ChunkBlockBody 或者 []peer.ID
@@ -124,7 +160,11 @@ func (s *StoreProtocol) fetchChunkOrNearerPeers(ctx context.Context, params *typ
 	}
 	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
 	b, _ := json.Marshal(msg)
-	rw.Write(b)
+	_, err = rw.Write(b)
+	if err != nil {
+		log.Error("fetchChunkOrNearerPeers", "stream write error", err)
+		return nil
+	}
 	rw.Flush()
 	res, err := readResponse(stream)
 	if err != nil {

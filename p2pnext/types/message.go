@@ -28,6 +28,7 @@ var (
 	ErrProtocolNotSupport = errors.New("protocol not support")
 	ErrNotFound           = errors.New("not found")
 	ErrInvalidParam       = errors.New("invalid parameter")
+	ErrInvalidResponse    = errors.New("invalid response")
 	ErrUnexpected         = errors.New("unexpected error")
 	ErrDBSave             = errors.New("save data to DB error")
 
