@@ -402,5 +402,11 @@ message ReqChunkRecords {
     repeated string pid = 4;
 }
 
+//请求区块头
+message ReqBlockHeaders {
+    int64 start         = 1;
+    int64 end           = 2;
+}
+
 
 

@@ -101,7 +101,7 @@ func (s *StoreProtocol) HandleEvent(m *queue.Message) {
 			m.ReplyErr("GetChunk", err)
 			return
 		}
-		headers := s.getHeaders(&types.ReqBlockHeader{Start: req.Start, End: req.End})
+		headers := s.getHeaders(&types.ReqBlockHeaders{Start: req.Start, End: req.End})
 		if len(headers) != len(bodys.Items) {
 			log.Error("GetBlockHeader", "error", types2.ErrLength, "header length", len(headers), "body length", len(bodys.Items))
 			m.ReplyErr("GetBlockHeader", types2.ErrLength)
@@ -320,7 +320,7 @@ func (s *StoreProtocol) onGetHeader(stream core.Stream, in interface{}) {
 		rw.Write(b)
 		rw.Flush()
 	}()
-	req, ok := in.(*types.ReqBlockHeader)
+	req, ok := in.(*types.ReqBlockHeaders)
 	if !ok {
 		res.Error = types2.ErrInvalidParam
 		return

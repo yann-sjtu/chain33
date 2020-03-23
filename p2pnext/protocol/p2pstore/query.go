@@ -14,7 +14,7 @@ import (
 	kbt "github.com/libp2p/go-libp2p-kbucket"
 )
 
-func (s *StoreProtocol) getHeaders(param *types.ReqBlockHeader) []*types.Header {
+func (s *StoreProtocol) getHeaders(param *types.ReqBlockHeaders) []*types.Header {
 	for _, pid := range s.Discovery.RoutingTale() {
 		childCtx, _ := context.WithTimeout(context.Background(), 30*time.Second)
 		stream, err := s.Host.NewStream(childCtx, pid, GetHeader)
