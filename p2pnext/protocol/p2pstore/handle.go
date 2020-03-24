@@ -42,8 +42,6 @@ func Init(env *protocol2.P2PEnv) {
 	protocol2.RegisterEventHandler(types.EventGetChunkBlock, p.HandleEvent)
 	protocol2.RegisterEventHandler(types.EventGetChunkBlockBody, p.HandleEvent)
 	protocol2.RegisterEventHandler(types.EventGetChunkRecord, p.HandleEvent)
-	protocol2.RegisterEventHandler(types.EventGetBlockHeader, p.HandleEvent)
-
 }
 
 // Handle 处理节点之间的请求
@@ -99,9 +97,9 @@ func (s *StoreProtocol) HandleEvent(m *queue.Message) {
 			m.ReplyErr("GetChunk", err)
 			return
 		}
-		headers := s.getHeaders(&types.ReqBlockHeaders{Start: req.Start, End: req.End})
-		if len(headers) != len(bodys.Items) {
-			log.Error("GetBlockHeader", "error", types2.ErrLength, "header length", len(headers), "body length", len(bodys.Items))
+		headers := s.getHeaders(&types.ReqBlocks{Start: req.Start, End: req.End})
+		if len(headers.Items) != len(bodys.Items) {
+			log.Error("GetBlockHeader", "error", types2.ErrLength, "header length", len(headers.Items), "body length", len(bodys.Items))
 			m.ReplyErr("GetBlockHeader", types2.ErrLength)
 			return
 		}
@@ -109,7 +107,7 @@ func (s *StoreProtocol) HandleEvent(m *queue.Message) {
 		var blockList []*types.Block
 		for index := range bodys.Items {
 			body := bodys.Items[index]
-			header := headers[index]
+			header := headers.Items[index]
 			block := &types.Block{
 				Version:    header.Version,
 				ParentHash: header.ParentHash,
@@ -326,12 +324,12 @@ func (s *StoreProtocol) onGetHeader(stream core.Stream, in interface{}) {
 		}
 		rw.Flush()
 	}()
-	req, ok := in.(*types.ReqBlockHeaders)
+	req, ok := in.(*types.ReqBlocks)
 	if !ok {
 		res.Error = types2.ErrInvalidParam
 		return
 	}
-	msg := s.QueueClient.NewMessage("blockchain", types.EventGetBlockHeader, req)
+	msg := s.QueueClient.NewMessage("blockchain", types.EventHeaders, req)
 	err := s.QueueClient.Send(msg, true)
 	if err != nil {
 		res.Error = err

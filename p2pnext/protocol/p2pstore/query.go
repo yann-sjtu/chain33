@@ -13,7 +13,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 )
 
-func (s *StoreProtocol) getHeaders(param *types.ReqBlockHeaders) []*types.Header {
+func (s *StoreProtocol) getHeaders(param *types.ReqBlocks) *types.Headers {
 	for _, pid := range s.Discovery.RoutingTale() {
 		headers, err := s.getHeadersFromPeer(param, pid)
 		if err != nil {
@@ -27,7 +27,7 @@ func (s *StoreProtocol) getHeaders(param *types.ReqBlockHeaders) []*types.Header
 	return nil
 }
 
-func (s *StoreProtocol) getHeadersFromPeer(param *types.ReqBlockHeaders, pid peer.ID) ([]*types.Header, error) {
+func (s *StoreProtocol) getHeadersFromPeer(param *types.ReqBlocks, pid peer.ID) (*types.Headers, error) {
 	childCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	stream, err := s.Host.NewStream(childCtx, pid, GetHeader)
@@ -52,7 +52,7 @@ func (s *StoreProtocol) getHeadersFromPeer(param *types.ReqBlockHeaders, pid pee
 	if err != nil {
 		return nil, err
 	}
-	headers, ok := res.Result.([]*types.Header)
+	headers, ok := res.Result.(*types.Headers)
 	if !ok {
 		return nil, types2.ErrInvalidResponse
 	}
