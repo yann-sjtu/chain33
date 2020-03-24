@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/libp2p/go-libp2p-core/peer"
+
 	protocol2 "github.com/33cn/chain33/p2pnext/protocol"
 	types2 "github.com/33cn/chain33/p2pnext/types"
 	"github.com/33cn/chain33/queue"
@@ -226,7 +228,14 @@ func (s *StoreProtocol) onFetchChunk(stream core.Stream, in interface{}) {
 
 	//本地没有数据或本地数据已过期
 	peers := s.Discovery.Routing().RoutingTable().NearestPeers(kbt.ConvertPeerID(s.Host.ID()), AlphaValue)
-	res.Result = peers
+	var addrInfos []peer.AddrInfo
+	for _, pid := range peers {
+		addrInfos = append(addrInfos, peer.AddrInfo{
+			ID:    pid,
+			Addrs: s.Host.Peerstore().Addrs(pid),
+		})
+	}
+	res.Result = addrInfos
 
 }
 

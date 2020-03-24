@@ -119,15 +119,14 @@ func (s *StoreProtocol) GetChunk(param *types.ReqChunkBlockBody) (*types.BlockBo
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 	defer cancel()
 	for {
-		res := s.fetchChunkOrNearerPeersAsync(ctx, param, peers)
-		if bodys, ok := res.(*types.BlockBodys); ok {
+		bodys, newPeers := s.fetchChunkOrNearerPeersAsync(ctx, param, peers)
+		if bodys != nil {
 			return bodys, nil
 		}
-		//若len(peerList) == 0则该类型断言为false，说明找不到更近的节点了
-		var ok bool
-		if peers, ok = res.([]peer.ID); !ok {
+		if len(newPeers) == 0 {
 			break
 		}
+		peers = newPeers
 	}
 	return nil, types2.ErrNotFound
 }

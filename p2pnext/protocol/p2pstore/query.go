@@ -106,7 +106,7 @@ func (s *StoreProtocol) getChunkRecordsFromPeer(param *types.ReqChunkRecords, pi
 }
 
 // fetchChunkOrNearerPeersAsync 返回 *types.ChunkBlockBody 或者 []peer.ID
-func (s *StoreProtocol) fetchChunkOrNearerPeersAsync(ctx context.Context, param *types.ReqChunkBlockBody, peers []peer.ID) interface{} {
+func (s *StoreProtocol) fetchChunkOrNearerPeersAsync(ctx context.Context, param *types.ReqChunkBlockBody, peers []peer.ID) (*types.BlockBodys, []peer.ID) {
 
 	responseCh := make(chan *types2.Response, AlphaValue)
 	cancelCtx, cancelFunc := context.WithCancel(ctx)
@@ -127,10 +127,13 @@ func (s *StoreProtocol) fetchChunkOrNearerPeersAsync(ctx context.Context, param 
 		switch t := res.Result.(type) {
 		case *types.BlockBodys:
 			//查到了区块数据，直接返回
-			return t
-		case []peer.ID:
+			return t, nil
+		case []peer.AddrInfo:
 			//没查到区块数据，返回了更近的节点信息
-			peerList = append(peerList, t...)
+			for _, addrInfo := range t {
+				peerList = append(peerList, addrInfo.ID)
+			}
+
 		default:
 			//返回类型不是*types.BlockBodys或[]peer.ID，对端节点异常
 			log.Error("fetchChunkAsync", "fetchChunkOrNearerPeers invalid response", res.Result)
@@ -143,7 +146,7 @@ func (s *StoreProtocol) fetchChunkOrNearerPeersAsync(ctx context.Context, param 
 		peerList = peerList[:AlphaValue]
 	}
 
-	return peerList
+	return nil, peerList
 }
 
 func (s *StoreProtocol) fetchChunkOrNearerPeers(ctx context.Context, params *types.ReqChunkBlockBody, pid peer.ID) *types2.Response {
@@ -174,6 +177,12 @@ func (s *StoreProtocol) fetchChunkOrNearerPeers(ctx context.Context, params *typ
 	}
 	log.Info("fetchChunkOrNearerPeers response ok", "remote peer", stream.Conn().RemotePeer().Pretty())
 
+	if addrInfos, ok := res.Result.([]peer.AddrInfo); ok {
+		for _, addrInfo := range addrInfos {
+			s.Host.Peerstore().AddAddrs(addrInfo.ID, addrInfo.Addrs, time.Hour)
+		}
+	}
+	//res.Result可能是*types.BlockBodys或者[]peer.AddrInfo
 	return res
 }
 
