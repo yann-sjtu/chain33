@@ -168,8 +168,10 @@ const (
 	// 添加ChunkRecord
 	EventAddChunkRecord = 316
 
-	// 获取Header数据
-	EventGetBlockHeader = 317
+	// p2p模块异步回复blockchain
+	EventReplyChunkBlock     = 317
+	EventReplyChunkBlockBody = 318
+	EventReplyChunkRecord    = 319
 )
 
 var eventName = map[int]string{

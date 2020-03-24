@@ -80,7 +80,7 @@ func (s *StoreProtocol) HandleEvent(m *queue.Message) {
 		data := m.GetData().(*types.ChunkInfo)
 		err := s.StoreChunk(data)
 		if err != nil {
-			m.ReplyErr("storeChunk", err)
+			log.Error("HandleEvent", "storeChunk error", err)
 			return
 		}
 
@@ -94,13 +94,12 @@ func (s *StoreProtocol) HandleEvent(m *queue.Message) {
 			End:       req.End,
 		})
 		if err != nil {
-			m.ReplyErr("GetChunk", err)
+			log.Error("HandleEvent", "GetChunk error", err)
 			return
 		}
 		headers := s.getHeaders(&types.ReqBlocks{Start: req.Start, End: req.End})
 		if len(headers.Items) != len(bodys.Items) {
 			log.Error("GetBlockHeader", "error", types2.ErrLength, "header length", len(headers.Items), "body length", len(bodys.Items))
-			m.ReplyErr("GetBlockHeader", types2.ErrLength)
 			return
 		}
 
@@ -123,27 +122,39 @@ func (s *StoreProtocol) HandleEvent(m *queue.Message) {
 			}
 			blockList = append(blockList, block)
 		}
-		m.Reply(queue.NewMessage(0, "", 0, &types.Blocks{Items: blockList}))
+		msg := s.QueueClient.NewMessage("blockchain", types.EventReplyChunkBlock, &types.Blocks{Items: blockList})
+		err = s.QueueClient.Send(msg, false)
+		if err != nil {
+			log.Error("EventGetChunkBlock", "reply message error", err)
+		}
 
 	// 获取chunkBody数据
 	case types.EventGetChunkBlockBody:
 		req := m.GetData().(*types.ReqChunkBlockBody)
 		blockBodys, err := s.GetChunk(req)
 		if err != nil {
-			m.ReplyErr("GetChunkBlockBody", err)
+			log.Error("HandleEvent", "GetChunkBlockBody error", err)
 			return
 		}
-		m.Reply(queue.NewMessage(0, "", 0, blockBodys))
+		msg := s.QueueClient.NewMessage("blockchain", types.EventReplyChunkBlockBody, blockBodys)
+		err = s.QueueClient.Send(msg, false)
+		if err != nil {
+			log.Error("EventGetChunkBlockBody", "reply message error", err)
+		}
 
 	// 获取归档索引
 	case types.EventGetChunkRecord:
 		req := m.GetData().(*types.ReqChunkRecords)
 		records := s.getChunkRecords(req)
 		if records == nil {
-			m.ReplyErr("GetChunkRecord", types2.ErrNotFound)
+			log.Error("HandleEvent", "GetChunkRecord error", types2.ErrNotFound)
 			return
 		}
-		m.Reply(queue.NewMessage(0, "", 0, records))
+		msg := s.QueueClient.NewMessage("blockchain", types.EventReplyChunkRecord, records)
+		err := s.QueueClient.Send(msg, false)
+		if err != nil {
+			log.Error("EventGetChunkBlockBody", "reply message error", err)
+		}
 	}
 }
 
