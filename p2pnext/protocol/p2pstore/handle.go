@@ -247,23 +247,12 @@ func (s *StoreProtocol) onFetchChunk(stream core.Stream, in interface{}) {
 		1. 向blockchain模块请求
 		2. blockchain模块没有数据则向对端节点请求
 */
-
 func (s *StoreProtocol) onStoreChunk(stream core.Stream, in interface{}) {
-	// Create a buffer stream for non blocking read and write.
-	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
+	defer stream.Conn().Close()
 
-	var res types2.Response
-	defer func() {
-		b, _ := json.Marshal(res)
-		_, err := rw.Write(b)
-		if err != nil {
-			log.Error("onStoreChunk", "stream write error", err)
-		}
-		rw.Flush()
-	}()
 	req, ok := in.(*types.ChunkInfo)
 	if !ok {
-		res.Error = types2.ErrInvalidParam
+		log.Error("onStoreChunk", "invalid param", in)
 		return
 	}
 
@@ -276,35 +265,34 @@ func (s *StoreProtocol) onStoreChunk(stream core.Stream, in interface{}) {
 		err = json.Unmarshal(b, &data)
 		if err != nil {
 			log.Error("onStoreChunk", "unmarshal error", err)
-			res.Error = types2.ErrUnexpected
 			return
 		}
 		data.RefreshTime = time.Now()
 		b, _ = json.Marshal(data)
 		err = s.DB.Put(genChunkKey(req.ChunkHash), b)
 		if err != nil {
-			log.Error("onStoreChunk", "unmarshal error", err)
-			res.Error = types2.ErrDBSave
+			log.Error("onStoreChunk", "store error", err)
 		}
 		return
 	}
 
 	var bodys *types.BlockBodys
-	bodys, err = s.getChunkFromBlockchain(in)
+	bodys, err = s.getChunkFromBlockchain(req)
 	if err != nil {
 		//本地节点没有数据，则从对端节点请求数据
 		req := in.(*types.ChunkInfo)
+		s.Host.Peerstore().AddAddr(stream.Conn().RemotePeer(), stream.Conn().RemoteMultiaddr(), time.Hour)
 		res2 := s.fetchChunkOrNearerPeers(context.Background(), &types.ReqChunkBlockBody{ChunkHash: req.ChunkHash}, stream.Conn().RemotePeer())
 		//对端节点发过来的消息，对端节点一定有数据
-		if res2 == nil {
-			res.Error = types2.ErrNotFound
+		if res2 == nil || res2.Error != nil {
+			log.Error("onStoreChunk", "get bodys from remote peer error", "invalid response", "response", res2)
 			return
 		}
-		if res2.Error != nil {
-			res.Error = res2.Error
+		var ok bool
+		if bodys, ok = res2.Result.(*types.BlockBodys); !ok {
+			log.Error("onStoreChunk", "get bodys from remote peer error", "invalid response", "result", res2.Result)
 			return
 		}
-		bodys = res2.Result.(*types.BlockBodys)
 
 	}
 
@@ -313,21 +301,18 @@ func (s *StoreProtocol) onStoreChunk(stream core.Stream, in interface{}) {
 		RefreshTime: time.Now(),
 	})
 	if err != nil {
-		res.Error = err
+		log.Error("onStoreChunk", "marshal error", err)
 		return
 	}
 
-	hash := req.ChunkHash
-	err = s.DB.Put(genChunkKey(hash), b)
+	err = s.DB.Put(genChunkKey(req.ChunkHash), b)
 	if err != nil {
-		res.Error = err
+		log.Error("onStoreChunk", "save chunk error", err)
 		return
 	}
 	err = s.addLocalChunkInfo(req)
 	if err != nil {
-		//索引存储失败，存储的区块也要回滚
-		_ = s.DB.Delete(genChunkKey(hash))
-		res.Error = err
+		log.Error("onStoreChunk", "save local index error", err)
 		return
 	}
 }
@@ -395,7 +380,7 @@ func (s *StoreProtocol) onGetChunkRecord(stream core.Stream, in interface{}) {
 	res.Result = resp.GetData()
 }
 
-func (s *StoreProtocol) getChunkFromBlockchain(param interface{}) (*types.BlockBodys, error) {
+func (s *StoreProtocol) getChunkFromBlockchain(param *types.ChunkInfo) (*types.BlockBodys, error) {
 	msg := s.QueueClient.NewMessage("blockchain", types.EventGetChunkBlockBody, param)
 	err := s.QueueClient.Send(msg, true)
 	if err != nil {
@@ -406,5 +391,4 @@ func (s *StoreProtocol) getChunkFromBlockchain(param interface{}) (*types.BlockB
 		return nil, err
 	}
 	return resp.GetData().(*types.BlockBodys), nil
-
 }

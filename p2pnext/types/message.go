@@ -30,6 +30,7 @@ var (
 	ErrInvalidParam       = errors.New("invalid parameter")
 	ErrInvalidResponse    = errors.New("invalid response")
 	ErrUnexpected         = errors.New("unexpected error")
+	ErrDataExpired        = errors.New("data expired")
 	ErrDBSave             = errors.New("save data to DB error")
 
 	ExpiredTime     = time.Hour * 24
