@@ -7,11 +7,11 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/33cn/chain33/types"
-	"github.com/libp2p/go-libp2p-core/peer"
-	kbt "github.com/libp2p/go-libp2p-kbucket"
-
 	types2 "github.com/33cn/chain33/p2pnext/types"
+	"github.com/33cn/chain33/types"
+
+	"github.com/libp2p/go-libp2p-core/peer"
+	kb "github.com/libp2p/go-libp2p-kbucket"
 )
 
 func (s *StoreProtocol) startRepublish() {
@@ -41,7 +41,7 @@ func (s *StoreProtocol) republish() error {
 }
 
 func (s *StoreProtocol) notifyStoreChunk(req *types.ChunkInfo) {
-	peers := s.Discovery.Routing().RoutingTable().NearestPeers(kbt.ConvertKey(genChunkPath(req.ChunkHash)), Backup)
+	peers := s.Discovery.Routing().RoutingTable().NearestPeers(kb.ConvertKey(genChunkPath(req.ChunkHash)), Backup)
 	for _, pid := range peers {
 		err := s.storeChunkOnPeer(req, pid)
 		if err != nil {

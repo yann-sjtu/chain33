@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ipfs/go-datastore"
-
 	"github.com/33cn/chain33/common/log/log15"
 	types2 "github.com/33cn/chain33/p2pnext/types"
 	"github.com/33cn/chain33/types"
+
+	"github.com/ipfs/go-datastore"
 )
 
 const (

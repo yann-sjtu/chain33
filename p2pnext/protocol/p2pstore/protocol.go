@@ -1,10 +1,11 @@
 package p2pstore
 
 import (
-	protocol2 "github.com/33cn/chain33/p2pnext/protocol"
+	"github.com/33cn/chain33/p2pnext/protocol"
 	types2 "github.com/33cn/chain33/p2pnext/types"
 	"github.com/33cn/chain33/queue"
 	"github.com/33cn/chain33/types"
+
 	"github.com/gogo/protobuf/proto"
 	core "github.com/libp2p/go-libp2p-core"
 )
@@ -17,11 +18,11 @@ const (
 )
 
 type StoreProtocol struct {
-	protocol2.BaseProtocol //default协议实现
-	*protocol2.P2PEnv      //协议共享接口变量
+	protocol.BaseProtocol //default协议实现
+	*protocol.P2PEnv      //协议共享接口变量
 }
 
-func Init(env *protocol2.P2PEnv) {
+func Init(env *protocol.P2PEnv) {
 	p := &StoreProtocol{
 		P2PEnv: env,
 	}
@@ -32,10 +33,10 @@ func Init(env *protocol2.P2PEnv) {
 	p.Host.SetStreamHandler(GetHeader, p.Handle)
 	p.Host.SetStreamHandler(GetChunkRecord, p.Handle)
 	//同时注册eventHandler，用于处理blockchain模块发来的请求
-	protocol2.RegisterEventHandler(types.EventNotifyStoreChunk, p.HandleEvent)
-	protocol2.RegisterEventHandler(types.EventGetChunkBlock, p.HandleEvent)
-	protocol2.RegisterEventHandler(types.EventGetChunkBlockBody, p.HandleEvent)
-	protocol2.RegisterEventHandler(types.EventGetChunkRecord, p.HandleEvent)
+	protocol.RegisterEventHandler(types.EventNotifyStoreChunk, p.HandleEvent)
+	protocol.RegisterEventHandler(types.EventGetChunkBlock, p.HandleEvent)
+	protocol.RegisterEventHandler(types.EventGetChunkBlockBody, p.HandleEvent)
+	protocol.RegisterEventHandler(types.EventGetChunkRecord, p.HandleEvent)
 }
 
 // Handle 处理节点之间的请求

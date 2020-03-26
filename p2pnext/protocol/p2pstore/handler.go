@@ -10,7 +10,7 @@ import (
 	"github.com/33cn/chain33/types"
 	core "github.com/libp2p/go-libp2p-core"
 	"github.com/libp2p/go-libp2p-core/peer"
-	kbt "github.com/libp2p/go-libp2p-kbucket"
+	kb "github.com/libp2p/go-libp2p-kbucket"
 )
 
 //StoreChunk handles notification of blockchain
@@ -20,8 +20,8 @@ func (s *StoreProtocol) StoreChunk(req *types.ChunkInfo) error {
 		return types2.ErrInvalidParam
 	}
 
-	peers := s.Discovery.Routing().RoutingTable().NearestPeers(kbt.ConvertKey(genChunkPath(req.ChunkHash)), 1)
-	if len(peers) != 0 && kbt.Closer(peers[0], s.Host.ID(), genChunkPath(req.ChunkHash)) {
+	peers := s.Discovery.Routing().RoutingTable().NearestPeers(kb.ConvertKey(genChunkPath(req.ChunkHash)), 1)
+	if len(peers) != 0 && kb.Closer(peers[0], s.Host.ID(), genChunkPath(req.ChunkHash)) {
 		return nil
 	}
 	//如果p2pStore已保存数据，只更新时间即可
@@ -67,7 +67,7 @@ func (s *StoreProtocol) GetChunk(req *types.ReqChunkBlockBody) (*types.BlockBody
 
 	//本地数据不存在或已过期，则向临近节点查询
 	//首先从本地路由表获取 *3* 个最近的节点
-	peers := s.Discovery.Routing().RoutingTable().NearestPeers(kbt.ConvertKey(genChunkPath(req.ChunkHash)), AlphaValue)
+	peers := s.Discovery.Routing().RoutingTable().NearestPeers(kb.ConvertKey(genChunkPath(req.ChunkHash)), AlphaValue)
 	//递归查询时间上限一小时
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 	defer cancel()
@@ -121,7 +121,7 @@ func (s *StoreProtocol) onFetchChunk(stream core.Stream, in interface{}) {
 	}
 
 	//本地没有数据或本地数据已过期
-	peers := s.Discovery.Routing().RoutingTable().NearestPeers(kbt.ConvertPeerID(s.Host.ID()), AlphaValue)
+	peers := s.Discovery.Routing().RoutingTable().NearestPeers(kb.ConvertPeerID(s.Host.ID()), AlphaValue)
 	var addrInfos []peer.AddrInfo
 	for _, pid := range peers {
 		addrInfos = append(addrInfos, peer.AddrInfo{

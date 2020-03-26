@@ -7,6 +7,7 @@ import (
 	p2pty "github.com/33cn/chain33/p2pnext/types"
 	"github.com/33cn/chain33/queue"
 	"github.com/33cn/chain33/types"
+
 	"github.com/gogo/protobuf/proto"
 	ds "github.com/ipfs/go-datastore"
 	core "github.com/libp2p/go-libp2p-core"
