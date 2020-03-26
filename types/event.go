@@ -169,9 +169,7 @@ const (
 	EventAddChunkRecord = 316
 
 	// p2p模块异步回复blockchain
-	EventReplyChunkBlock     = 317
-	EventReplyChunkBlockBody = 318
-	EventReplyChunkRecord    = 319
+	EventAddChunkBlock = 317
 )
 
 var eventName = map[int]string{

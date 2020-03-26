@@ -186,6 +186,19 @@ func (s *StoreProtocol) fetchChunkOrNearerPeers(ctx context.Context, params *typ
 	return res
 }
 
+func (s *StoreProtocol) getChunkFromBlockchain(param *types.ChunkInfo) (*types.BlockBodys, error) {
+	msg := s.QueueClient.NewMessage("blockchain", types.EventGetChunkBlockBody, param)
+	err := s.QueueClient.Send(msg, true)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := s.QueueClient.Wait(msg)
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetData().(*types.BlockBodys), nil
+}
+
 func readResponse(stream network.Stream) (*types2.Response, error) {
 	var data []byte
 	var err error
