@@ -37,6 +37,8 @@ func Init(env *protocol.P2PEnv) {
 	protocol.RegisterEventHandler(types.EventGetChunkBlock, p.HandleEvent)
 	protocol.RegisterEventHandler(types.EventGetChunkBlockBody, p.HandleEvent)
 	protocol.RegisterEventHandler(types.EventGetChunkRecord, p.HandleEvent)
+
+	go p.startRepublish()
 }
 
 // Handle 处理节点之间的请求
