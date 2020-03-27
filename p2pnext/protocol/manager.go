@@ -29,10 +29,8 @@ func RegisterEventHandler(eventID int64, handler EventHandler) {
 }
 
 // GetEventHandler gets event handler by event ID.
-func GetEventHandler(eventID int64) (EventHandler, bool) {
+func GetEventHandler(eventID int64) EventHandler {
 	eventHandlerMutex.RLock()
 	defer eventHandlerMutex.RUnlock()
-	handler, ok := eventHandlerMap[eventID]
-
-	return handler, ok
+	return eventHandlerMap[eventID]
 }

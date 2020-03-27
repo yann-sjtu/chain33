@@ -203,7 +203,7 @@ func (s *StoreProtocol) onGetHeader(stream core.Stream, in interface{}) {
 		res.Error = types2.ErrInvalidParam
 		return
 	}
-	msg := s.QueueClient.NewMessage("blockchain", types.EventHeaders, req)
+	msg := s.QueueClient.NewMessage("blockchain", types.EventGetHeaders, req)
 	err := s.QueueClient.Send(msg, true)
 	if err != nil {
 		res.Error = err
