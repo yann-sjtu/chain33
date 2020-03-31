@@ -66,6 +66,7 @@ func (s *StoreProtocol) Handle(stream core.Stream) {
 		log.Error("Handle", "error", types2.ErrProtocolNotSupport, "protocol", msg.ProtocolID)
 	}
 	stream.Close()
+	//TODO 管理connection
 }
 
 // HandleEvent 处理模块之间的事件

@@ -13,15 +13,16 @@ import (
 	kb "github.com/libp2p/go-libp2p-kbucket"
 )
 
-//StoreChunk handles notification of blockchain
-// store chunk if this node is the nearest node in the local routing table
+//StoreChunk handles notification of blockchain,
+// store chunk if this node is the nearest node in the local routing table.
 func (s *StoreProtocol) StoreChunk(req *types.ChunkInfo) error {
 	if req == nil {
 		return types2.ErrInvalidParam
 	}
 
-	peers := s.Discovery.Routing().RoutingTable().NearestPeers(kb.ConvertKey(genChunkPath(req.ChunkHash)), 1)
-	if len(peers) != 0 && kb.Closer(peers[0], s.Host.ID(), genChunkPath(req.ChunkHash)) {
+	//路由表中存在比当前节点更近的节点，说明当前节点不是局部最优节点，不需要保存数据
+	pid := s.Discovery.Routing().RoutingTable().NearestPeer(kb.ConvertKey(genChunkPath(req.ChunkHash)))
+	if pid != "" && kb.Closer(pid, s.Host.ID(), genChunkPath(req.ChunkHash)) {
 		return nil
 	}
 	//如果p2pStore已保存数据，只更新时间即可
@@ -40,11 +41,12 @@ func (s *StoreProtocol) StoreChunk(req *types.ChunkInfo) error {
 		return err
 	}
 
-	//本地存储之后立即到其他节点做依次备份
+	//本地存储之后立即到其他节点做一次备份
 	s.notifyStoreChunk(req)
 	return nil
 }
 
+//GetChunk gets chunk data from blockchain module or other peers.
 func (s *StoreProtocol) GetChunk(req *types.ReqChunkBlockBody) (*types.BlockBodys, error) {
 	if req == nil {
 		return nil, types2.ErrInvalidParam

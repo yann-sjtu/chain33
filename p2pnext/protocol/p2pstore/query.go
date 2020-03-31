@@ -178,6 +178,7 @@ func (s *StoreProtocol) fetchChunkOrNearerPeers(ctx context.Context, params *typ
 	}
 	log.Info("fetchChunkOrNearerPeers response ok", "remote peer", stream.Conn().RemotePeer().Pretty())
 
+	//如果对端节点返回了addrInfo，把节点信息加入到PeerStore
 	if addrInfos, ok := res.Result.([]peer.AddrInfo); ok {
 		for _, addrInfo := range addrInfos {
 			s.Host.Peerstore().AddAddrs(addrInfo.ID, addrInfo.Addrs, time.Hour)
