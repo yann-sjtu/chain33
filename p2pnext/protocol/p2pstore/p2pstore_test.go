@@ -96,6 +96,22 @@ func TestInit(t *testing.T) {
 	msg = <-msgCh
 	assert.Equal(t, 556, len(msg.Data.(*types.Blocks).Items))
 
+	//向host1请求Records
+	testGetRecord(t, client, "p2p", &types.ReqChunkRecords{
+		Start: 100,
+		End:   199,
+	})
+	msg = <-msgCh
+	assert.Equal(t, 100, len(msg.Data.(*types.ChunkRecords).Kvs))
+
+	//向host2请求Records
+	testGetRecord(t, client, "p2p", &types.ReqChunkRecords{
+		Start: 1000,
+		End:   1999,
+	})
+	msg = <-msgCh
+	assert.Equal(t, 1000, len(msg.Data.(*types.ChunkRecords).Kvs))
+
 }
 
 func testStoreChunk(t *testing.T, client queue.Client, topic string, req *types.ChunkInfo) {
@@ -161,7 +177,15 @@ func initMockBlockchain(q queue.Queue) <-chan *queue.Message {
 					Items: items,
 				}
 				msg.Reply(queue.NewMessage(0, "", 0, headers))
-
+			case types.EventGetChunkRecord:
+				req := msg.Data.(*types.ReqChunkRecords)
+				records := types.ChunkRecords{
+					Kvs: make([]*types.KeyValue, 0, req.End-req.Start+1),
+				}
+				for i := req.Start; i <= req.End; i++ {
+					records.Kvs = append(records.Kvs, &types.KeyValue{})
+				}
+				msg.Reply(&queue.Message{Data: &records})
 			default:
 				ch <- msg
 			}
