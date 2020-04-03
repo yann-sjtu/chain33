@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/libp2p/go-libp2p-core/network"
+
 	types2 "github.com/33cn/chain33/p2pnext/types"
 	"github.com/33cn/chain33/types"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -136,7 +138,7 @@ func (s *StoreProtocol) onFetchChunk(writer *bufio.Writer, req *types.ReqChunkBl
 		1. 向blockchain模块请求
 		2. blockchain模块没有数据则向对端节点请求
 */
-func (s *StoreProtocol) onStoreChunk(remotePeer peer.ID, req *types.ChunkInfo) {
+func (s *StoreProtocol) onStoreChunk(stream network.Stream, req *types.ChunkInfo) {
 	//检查本地 p2pStore，如果已存在数据则直接更新
 	err := s.updateChunk(req)
 	if err == nil {
@@ -147,7 +149,8 @@ func (s *StoreProtocol) onStoreChunk(remotePeer peer.ID, req *types.ChunkInfo) {
 	bodys, err := s.getChunkFromBlockchain(req)
 	if err != nil {
 		//本地节点没有数据，则从对端节点请求数据
-		bodys, _, err = s.fetchChunkOrNearerPeers(context.Background(), &types.ReqChunkBlockBody{ChunkHash: req.ChunkHash}, remotePeer)
+		s.Host.Peerstore().AddAddr(stream.Conn().RemotePeer(), stream.Conn().RemoteMultiaddr(), time.Hour)
+		bodys, _, err = s.fetchChunkOrNearerPeers(context.Background(), &types.ReqChunkBlockBody{ChunkHash: req.ChunkHash}, stream.Conn().RemotePeer())
 		//对端节点发过来的消息，对端节点一定有数据
 		if err != nil {
 			log.Error("onStoreChunk", "get bodys from remote peer error", err)
@@ -182,6 +185,11 @@ func (s *StoreProtocol) onGetHeader(writer *bufio.Writer, req *types.ReqBlocks) 
 		res.ErrorInfo = err.Error()
 		return
 	}
+
+	if reply, ok := resp.GetData().(*types.Reply); ok {
+		res.ErrorInfo = string(reply.Msg)
+		return
+	}
 	res.Result = &types.P2PStoreResponse_Headers{Headers: resp.GetData().(*types.Headers)}
 }
 
@@ -203,6 +211,10 @@ func (s *StoreProtocol) onGetChunkRecord(writer *bufio.Writer, req *types.ReqChu
 	resp, err := s.QueueClient.Wait(msg)
 	if err != nil {
 		res.ErrorInfo = err.Error()
+		return
+	}
+	if reply, ok := resp.GetData().(*types.Reply); ok {
+		res.ErrorInfo = string(reply.Msg)
 		return
 	}
 	res.Result = &types.P2PStoreResponse_ChunkRecords{ChunkRecords: resp.GetData().(*types.ChunkRecords)}

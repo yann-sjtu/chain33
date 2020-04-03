@@ -2,7 +2,6 @@ package p2pstore
 
 import (
 	"bufio"
-	"time"
 
 	"github.com/libp2p/go-libp2p-core/network"
 
@@ -72,8 +71,7 @@ func (s *StoreProtocol) Handle(stream network.Stream) {
 		s.onFetchChunk(rw.Writer, t.ReqChunkBlockBody)
 	case *types.P2PStoreRequest_ChunkInfo:
 		// *types.ChunkInfo -> none
-		s.Host.Peerstore().AddAddr(stream.Conn().RemotePeer(), stream.Conn().RemoteMultiaddr(), time.Hour)
-		s.onStoreChunk(stream.Conn().RemotePeer(), t.ChunkInfo)
+		s.onStoreChunk(stream, t.ChunkInfo)
 	case *types.P2PStoreRequest_ReqBlocks:
 		// *types.ReqBlocks -> *types.Headers
 		s.onGetHeader(rw.Writer, t.ReqBlocks)
@@ -83,7 +81,6 @@ func (s *StoreProtocol) Handle(stream network.Stream) {
 	default:
 		log.Error("Handle", "error", types2.ErrProtocolNotSupport, "protocol", req.ProtocolID)
 	}
-	//stream.Conn().Close()
 	//TODO 管理connection
 }
 

@@ -48,12 +48,13 @@ func (s *StoreProtocol) getHeadersFromPeer(param *types.ReqBlocks, pid peer.ID) 
 		log.Error("getHeadersFromPeer", "stream write error", err)
 		return nil, err
 	}
-
-	//close之后不能写数据，但依然可以读数据
 	var res types.P2PStoreResponse
 	err = readMessage(rw.Reader, &res)
 	if err != nil {
 		return nil, err
+	}
+	if res.ErrorInfo != "" {
+		return nil, errors.New(res.ErrorInfo)
 	}
 	return res.Result.(*types.P2PStoreResponse_Headers).Headers, nil
 }
@@ -97,6 +98,9 @@ func (s *StoreProtocol) getChunkRecordsFromPeer(param *types.ReqChunkRecords, pi
 	err = readMessage(rw.Reader, &res)
 	if err != nil {
 		return nil, err
+	}
+	if res.ErrorInfo != "" {
+		return nil, errors.New(res.ErrorInfo)
 	}
 	return res.Result.(*types.P2PStoreResponse_ChunkRecords).ChunkRecords, nil
 }
@@ -219,6 +223,9 @@ func (s *StoreProtocol) getChunkFromBlockchain(param *types.ChunkInfo) (*types.B
 	resp, err := s.QueueClient.Wait(msg)
 	if err != nil {
 		return nil, err
+	}
+	if reply, ok := resp.GetData().(*types.Reply); ok {
+		return nil, errors.New(string(reply.Msg))
 	}
 	return resp.GetData().(*types.BlockBodys), nil
 }

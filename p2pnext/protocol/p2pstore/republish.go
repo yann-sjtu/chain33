@@ -65,5 +65,4 @@ func (s *StoreProtocol) storeChunkOnPeer(req *types.ChunkInfo, pid peer.ID) erro
 		Data:       &types.P2PStoreRequest_ChunkInfo{ChunkInfo: req},
 	}
 	return writeMessage(rw.Writer, &msg)
-
 }
