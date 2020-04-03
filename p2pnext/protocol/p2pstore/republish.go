@@ -58,18 +58,12 @@ func (s *StoreProtocol) storeChunkOnPeer(req *types.ChunkInfo, pid peer.ID) erro
 		log.Error("new stream error when store chunk", "peer id", pid, "error", err)
 		return err
 	}
+	defer stream.Close()
 	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
 	msg := types.P2PStoreRequest{
 		ProtocolID: StoreChunk,
 		Data:       &types.P2PStoreRequest_ChunkInfo{ChunkInfo: req},
 	}
-	err = writeMessage(rw.Writer, &msg)
-	if err != nil {
-		return err
-	}
-	err = stream.Close()
-	if err != nil {
-		return err
-	}
-	return nil
+	return writeMessage(rw.Writer, &msg)
+
 }

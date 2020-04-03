@@ -34,6 +34,7 @@ func (s *StoreProtocol) getHeadersFromPeer(param *types.ReqBlocks, pid peer.ID) 
 	if err != nil {
 		return nil, err
 	}
+	defer stream.Close()
 	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
 	fmt.Println("getHeadersFromPeer", "local", stream.Conn().LocalPeer(), "remote", stream.Conn().RemotePeer(), "id", s.Host.ID())
 	msg := types.P2PStoreRequest{
@@ -47,7 +48,7 @@ func (s *StoreProtocol) getHeadersFromPeer(param *types.ReqBlocks, pid peer.ID) 
 		log.Error("getHeadersFromPeer", "stream write error", err)
 		return nil, err
 	}
-	stream.Close()
+
 	//close之后不能写数据，但依然可以读数据
 	var res types.P2PStoreResponse
 	err = readMessage(rw.Reader, &res)
@@ -78,6 +79,7 @@ func (s *StoreProtocol) getChunkRecordsFromPeer(param *types.ReqChunkRecords, pi
 	if err != nil {
 		return nil, err
 	}
+	defer stream.Close()
 	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
 	msg := types.P2PStoreRequest{
 		ProtocolID: GetChunkRecord,
@@ -90,8 +92,7 @@ func (s *StoreProtocol) getChunkRecordsFromPeer(param *types.ReqChunkRecords, pi
 		log.Error("getChunkRecordsFromPeer", "stream write error", err)
 		return nil, err
 	}
-	//close之后不能写数据，但依然可以读数据
-	stream.Close()
+
 	var res types.P2PStoreResponse
 	err = readMessage(rw.Reader, &res)
 	if err != nil {
@@ -117,8 +118,7 @@ func (s *StoreProtocol) fetchChunkOrNearerPeersAsync(ctx context.Context, param 
 			if err != nil {
 				log.Error("fetchChunkOrNearerPeersAsync", "fetchChunkOrNearerPeers error", err, "peer id", pid)
 				responseCh <- nil
-			}
-			if bodys != nil {
+			} else if bodys != nil {
 				responseCh <- bodys
 			} else if len(addrInfos) != 0 {
 				responseCh <- addrInfos
@@ -157,7 +157,7 @@ func (s *StoreProtocol) fetchChunkOrNearerPeers(ctx context.Context, params *typ
 		log.Error("getBlocksFromRemote", "error", err)
 		return nil, nil, err
 	}
-	//defer stream.Close()
+	defer stream.Close()
 	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
 	msg := types.P2PStoreRequest{
 		ProtocolID: FetchChunk,

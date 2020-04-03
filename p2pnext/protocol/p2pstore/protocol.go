@@ -49,6 +49,9 @@ func (s *StoreProtocol) Handle(stream network.Stream) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Error("Handle", "error", r)
+			stream.Reset()
+		} else {
+			stream.Close()
 		}
 	}()
 
@@ -80,7 +83,6 @@ func (s *StoreProtocol) Handle(stream network.Stream) {
 	default:
 		log.Error("Handle", "error", types2.ErrProtocolNotSupport, "protocol", req.ProtocolID)
 	}
-	stream.Close()
 	//stream.Conn().Close()
 	//TODO 管理connection
 }
