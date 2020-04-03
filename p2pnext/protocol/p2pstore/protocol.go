@@ -46,6 +46,12 @@ func Init(env *protocol.P2PEnv) {
 
 // Handle 处理节点之间的请求
 func (s *StoreProtocol) Handle(stream network.Stream) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error("Handle", "error", r)
+		}
+	}()
+
 	// Create a buffer stream for non blocking read and write
 	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
 	var req types.P2PStoreRequest
@@ -81,8 +87,12 @@ func (s *StoreProtocol) Handle(stream network.Stream) {
 
 // HandleEvent 处理模块之间的事件
 func (s *StoreProtocol) HandleEvent(m *queue.Message) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error("HandleEvent", "error", r)
+		}
+	}()
 	switch m.Ty {
-
 	// 通知临近节点进行区块数据归档
 	case types.EventNotifyStoreChunk:
 		data := m.GetData().(*types.ChunkInfo)
