@@ -26,14 +26,12 @@ var (
 
 // 保存chunk到本地p2pStore，同时更新本地chunk列表
 func (s *StoreProtocol) addChunkBlock(info *types.ChunkInfo, bodys *types.BlockBodys) error {
-	b, err := json.Marshal(types2.StorageData{
-		Data:        bodys,
-		RefreshTime: time.Now(),
+	b := types.Encode(&types.P2PStoreData{
+		Time: time.Now().UnixNano(),
+		Data: &types.P2PStoreData_BlockBodys{BlockBodys: bodys},
 	})
-	if err != nil {
-		return err
-	}
-	err = s.addLocalChunkInfo(info)
+
+	err := s.addLocalChunkInfo(info)
 	if err != nil {
 		return err
 	}
@@ -46,17 +44,13 @@ func (s *StoreProtocol) updateChunk(req *types.ChunkInfo) error {
 	if err != nil {
 		return err
 	}
-	var data types2.StorageData
-	err = json.Unmarshal(b, &data)
+	var data types.P2PStoreData
+	err = types.Decode(b, &data)
 	if err != nil {
 		return err
 	}
-	data.RefreshTime = time.Now()
-	b, err = json.Marshal(data)
-	if err != nil {
-		return err
-	}
-	return s.DB.Put(genChunkKey(req.ChunkHash), b)
+	data.Time = time.Now().UnixNano()
+	return s.DB.Put(genChunkKey(req.ChunkHash), types.Encode(&data))
 }
 
 // 获取本地chunk数据，若数据已过期则删除该数据并返回空
@@ -65,12 +59,12 @@ func (s *StoreProtocol) getChunkBlock(hash []byte) (*types.BlockBodys, error) {
 	if err != nil {
 		return nil, err
 	}
-	var data types2.StorageData
-	err = json.Unmarshal(b, &data)
+	var data types.P2PStoreData
+	err = types.Decode(b, &data)
 	if err != nil {
 		return nil, err
 	}
-	if time.Since(data.RefreshTime) > types2.ExpiredTime {
+	if time.Now().UnixNano()-data.Time > int64(types2.ExpiredTime) {
 		err = s.DB.Delete(genChunkKey(hash))
 		if err != nil {
 			log.Error("getChunkBlock", "delete chunk error", err, "hash", hex.EncodeToString(hash))
@@ -79,7 +73,7 @@ func (s *StoreProtocol) getChunkBlock(hash []byte) (*types.BlockBodys, error) {
 		return nil, types2.ErrNotFound
 	}
 
-	return data.Data.(*types.BlockBodys), nil
+	return data.Data.(*types.P2PStoreData_BlockBodys).BlockBodys, nil
 
 }
 
@@ -133,7 +127,7 @@ func (s *StoreProtocol) getLocalChunkInfoMap() (map[string]*types.ChunkInfo, err
 		return nil, err
 	}
 	if !ok {
-		return nil, nil
+		return make(map[string]*types.ChunkInfo), nil
 	}
 	value, err := s.DB.Get(datastore.NewKey(LocalChunkInfoKey))
 	if err != nil {

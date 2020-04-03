@@ -4,13 +4,12 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"io"
+	"errors"
+	"fmt"
 	"time"
 
 	types2 "github.com/33cn/chain33/p2pnext/types"
 	"github.com/33cn/chain33/types"
-
-	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 )
 
@@ -18,14 +17,14 @@ func (s *StoreProtocol) getHeaders(param *types.ReqBlocks) *types.Headers {
 	for _, pid := range s.Discovery.RoutingTale() {
 		headers, err := s.getHeadersFromPeer(param, pid)
 		if err != nil {
-			log.Error("getChunkRecords", "peer", pid, "error", err)
+			log.Error("getHeaders", "peer", pid, "error", err)
 			continue
 		}
 		return headers
 	}
 
 	log.Error("getHeaders", "error", types2.ErrNotFound)
-	return nil
+	return &types.Headers{}
 }
 
 func (s *StoreProtocol) getHeadersFromPeer(param *types.ReqBlocks, pid peer.ID) (*types.Headers, error) {
@@ -35,29 +34,27 @@ func (s *StoreProtocol) getHeadersFromPeer(param *types.ReqBlocks, pid peer.ID) 
 	if err != nil {
 		return nil, err
 	}
-	msg := types2.Message{
-		ProtocolID: GetHeader,
-		Params:     param,
-	}
 	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
-	b, _ := json.Marshal(msg)
-	_, err = rw.Write(b)
+	fmt.Println("getHeadersFromPeer", "local", stream.Conn().LocalPeer(), "remote", stream.Conn().RemotePeer(), "id", s.Host.ID())
+	msg := types.P2PStoreRequest{
+		ProtocolID: GetHeader,
+		Data: &types.P2PStoreRequest_ReqBlocks{
+			ReqBlocks: param,
+		},
+	}
+	err = writeMessage(rw.Writer, &msg)
 	if err != nil {
 		log.Error("getHeadersFromPeer", "stream write error", err)
 		return nil, err
 	}
-	rw.Flush()
 	stream.Close()
 	//close之后不能写数据，但依然可以读数据
-	res, err := readResponse(stream)
+	var res types.P2PStoreResponse
+	err = readMessage(rw.Reader, &res)
 	if err != nil {
 		return nil, err
 	}
-	headers, ok := res.Result.(*types.Headers)
-	if !ok {
-		return nil, types2.ErrInvalidResponse
-	}
-	return headers, nil
+	return res.Result.(*types.P2PStoreResponse_Headers).Headers, nil
 }
 
 func (s *StoreProtocol) getChunkRecords(param *types.ReqChunkRecords) *types.ChunkRecords {
@@ -81,51 +78,58 @@ func (s *StoreProtocol) getChunkRecordsFromPeer(param *types.ReqChunkRecords, pi
 	if err != nil {
 		return nil, err
 	}
-	msg := types2.Message{
-		ProtocolID: GetChunkRecord,
-		Params:     param,
-	}
 	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
-	b, _ := json.Marshal(msg)
-	_, err = rw.Write(b)
+	msg := types.P2PStoreRequest{
+		ProtocolID: GetChunkRecord,
+		Data: &types.P2PStoreRequest_ReqChunkRecords{
+			ReqChunkRecords: param,
+		},
+	}
+	err = writeMessage(rw.Writer, &msg)
 	if err != nil {
 		log.Error("getChunkRecordsFromPeer", "stream write error", err)
 		return nil, err
 	}
-	rw.Flush()
 	//close之后不能写数据，但依然可以读数据
 	stream.Close()
-	res, err := readResponse(stream)
+	var res types.P2PStoreResponse
+	err = readMessage(rw.Reader, &res)
 	if err != nil {
 		return nil, err
 	}
-	records, ok := res.Result.(*types.ChunkRecords)
-	if !ok {
-		return nil, types2.ErrInvalidResponse
-	}
-	return records, nil
+	return res.Result.(*types.P2PStoreResponse_ChunkRecords).ChunkRecords, nil
 }
 
 // fetchChunkOrNearerPeersAsync 返回 *types.ChunkBlockBody 或者 []peer.ID
 func (s *StoreProtocol) fetchChunkOrNearerPeersAsync(ctx context.Context, param *types.ReqChunkBlockBody, peers []peer.ID) (*types.BlockBodys, []peer.ID) {
 
-	responseCh := make(chan *types2.Response, AlphaValue)
+	responseCh := make(chan interface{}, AlphaValue)
 	cancelCtx, cancelFunc := context.WithCancel(ctx)
 	defer cancelFunc()
 	// *3* 个节点并发请求
 	for _, peerID := range peers {
+		if peerID == s.Host.ID() {
+			responseCh <- nil
+			continue
+		}
 		go func(pid peer.ID) {
-			responseCh <- s.fetchChunkOrNearerPeers(cancelCtx, param, pid)
+			bodys, addrInfos, err := s.fetchChunkOrNearerPeers(cancelCtx, param, pid)
+			if err != nil {
+				log.Error("fetchChunkOrNearerPeersAsync", "fetchChunkOrNearerPeers error", err, "peer id", pid)
+				responseCh <- nil
+			}
+			if bodys != nil {
+				responseCh <- bodys
+			} else if len(addrInfos) != 0 {
+				responseCh <- addrInfos
+			}
 		}(peerID)
 	}
 
 	var peerList []peer.ID
 	for range peers {
 		res := <-responseCh
-		if res == nil || res.Error != nil {
-			continue
-		}
-		switch t := res.Result.(type) {
+		switch t := res.(type) {
 		case *types.BlockBodys:
 			//查到了区块数据，直接返回
 			return t, nil
@@ -134,11 +138,6 @@ func (s *StoreProtocol) fetchChunkOrNearerPeersAsync(ctx context.Context, param 
 			for _, addrInfo := range t {
 				peerList = append(peerList, addrInfo.ID)
 			}
-
-		default:
-			//返回类型不是*types.BlockBodys或[]peer.ID，对端节点异常
-			log.Error("fetchChunkAsync", "fetchChunkOrNearerPeers invalid response", res.Result)
-
 		}
 	}
 
@@ -150,42 +149,65 @@ func (s *StoreProtocol) fetchChunkOrNearerPeersAsync(ctx context.Context, param 
 	return nil, peerList
 }
 
-func (s *StoreProtocol) fetchChunkOrNearerPeers(ctx context.Context, params *types.ReqChunkBlockBody, pid peer.ID) *types2.Response {
+func (s *StoreProtocol) fetchChunkOrNearerPeers(ctx context.Context, params *types.ReqChunkBlockBody, pid peer.ID) (*types.BlockBodys, []peer.AddrInfo, error) {
 	childCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	stream, err := s.Host.NewStream(childCtx, pid, FetchChunk)
 	if err != nil {
 		log.Error("getBlocksFromRemote", "error", err)
-		return nil
+		return nil, nil, err
 	}
-	defer stream.Close()
-	msg := types2.Message{
-		ProtocolID: FetchChunk,
-		Params:     params,
-	}
+	//defer stream.Close()
 	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
-	b, _ := json.Marshal(msg)
-	_, err = rw.Write(b)
+	msg := types.P2PStoreRequest{
+		ProtocolID: FetchChunk,
+		Data: &types.P2PStoreRequest_ReqChunkBlockBody{
+			ReqChunkBlockBody: params,
+		},
+	}
+	err = writeMessage(rw.Writer, &msg)
 	if err != nil {
 		log.Error("fetchChunkOrNearerPeers", "stream write error", err)
-		return nil
+		return nil, nil, err
 	}
-	rw.Flush()
-	res, err := readResponse(stream)
+	var res types.P2PStoreResponse
+	err = readMessage(rw.Reader, &res)
 	if err != nil {
-		log.Error("fetchChunkFromPeer", "read response error", err)
-		return nil
+		log.Error("fetchChunkFromPeer", "read response error", err, "multiaddr", stream.Conn().LocalMultiaddr())
+		return nil, nil, err
 	}
 	log.Info("fetchChunkOrNearerPeers response ok", "remote peer", stream.Conn().RemotePeer().Pretty())
 
-	//如果对端节点返回了addrInfo，把节点信息加入到PeerStore
-	if addrInfos, ok := res.Result.([]peer.AddrInfo); ok {
+	switch v := res.Result.(type) {
+	case *types.P2PStoreResponse_BlockBodys:
+		if params.Filter {
+			var bodyList []*types.BlockBody
+			for _, body := range v.BlockBodys.Items {
+				if body.Height >= params.Start && body.Height <= params.End {
+					bodyList = append(bodyList, body)
+				}
+			}
+			v.BlockBodys.Items = bodyList
+		}
+		return v.BlockBodys, nil, nil
+	case *types.P2PStoreResponse_AddrInfo:
+		var addrInfos []peer.AddrInfo
+		err = json.Unmarshal(v.AddrInfo, &addrInfos)
+		if err != nil {
+			log.Error("fetchChunkOrNearerPeers", "addrInfo error", err)
+		}
+		//如果对端节点返回了addrInfo，把节点信息加入到PeerStore
 		for _, addrInfo := range addrInfos {
 			s.Host.Peerstore().AddAddrs(addrInfo.ID, addrInfo.Addrs, time.Hour)
 		}
+		return nil, addrInfos, nil
+	default:
+		if res.ErrorInfo != "" {
+			return nil, nil, errors.New(res.ErrorInfo)
+		}
 	}
-	//res.Result可能是*types.BlockBodys或者[]peer.AddrInfo
-	return res
+
+	return nil, nil, types2.ErrNotFound
 }
 
 func (s *StoreProtocol) getChunkFromBlockchain(param *types.ChunkInfo) (*types.BlockBodys, error) {
@@ -199,53 +221,4 @@ func (s *StoreProtocol) getChunkFromBlockchain(param *types.ChunkInfo) (*types.B
 		return nil, err
 	}
 	return resp.GetData().(*types.BlockBodys), nil
-}
-
-func readResponse(stream network.Stream) (*types2.Response, error) {
-	var data []byte
-	var err error
-	for {
-		buf := make([]byte, 100)
-		var n int
-		n, err = stream.Read(buf)
-		if err != nil && err != io.EOF {
-			return nil, err
-		}
-		data = append(data, buf[:n]...)
-		if err == io.EOF {
-			break
-		}
-	}
-
-	var res types2.Response
-	err = json.Unmarshal(data, &res)
-	if err != nil {
-		return nil, err
-	}
-
-	return &res, nil
-}
-
-func readMessage(stream network.Stream) (*types2.Message, error) {
-	var data []byte
-	for {
-		buf := make([]byte, 100)
-		var n int
-		n, err := stream.Read(buf)
-		if err != nil && err != io.EOF {
-			log.Error("Handle", "read stream error", err)
-			return nil, err
-		}
-		data = append(data, buf[:n]...)
-		if err == io.EOF {
-			break
-		}
-	}
-
-	var msg types2.Message
-	err := json.Unmarshal(data, &msg)
-	if err != nil {
-		return nil, err
-	}
-	return &msg, nil
 }

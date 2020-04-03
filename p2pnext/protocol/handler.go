@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"github.com/33cn/chain33/common/log/log15"
-
 	"github.com/33cn/chain33/p2pnext/protocol/types"
 	"github.com/33cn/chain33/queue"
 )
@@ -18,7 +17,7 @@ func HandleEvent(msg *queue.Message) {
 		log.Debug("HandleEvent", "msgTy", msg.Ty)
 		eventHander(msg)
 	} else if eventHandler := GetEventHandler(msg.Ty); eventHandler != nil {
-		log.Debug("HandleEvent", "msgTy", msg.Ty)
+		log.Debug("HandleEvent2", "msgTy", msg.Ty)
 		eventHandler(msg)
 
 	} else {

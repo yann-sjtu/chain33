@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"time"
 
 	types2 "github.com/33cn/chain33/p2pnext/types"
@@ -59,20 +58,12 @@ func (s *StoreProtocol) storeChunkOnPeer(req *types.ChunkInfo, pid peer.ID) erro
 		log.Error("new stream error when store chunk", "peer id", pid, "error", err)
 		return err
 	}
-	msg := types2.Message{
-		ProtocolID: StoreChunk,
-		Params:     req,
-	}
 	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
-	b, err := json.Marshal(msg)
-	if err != nil {
-		return err
+	msg := types.P2PStoreRequest{
+		ProtocolID: StoreChunk,
+		Data:       &types.P2PStoreRequest_ChunkInfo{ChunkInfo: req},
 	}
-	_, err = rw.Write(b)
-	if err != nil {
-		return err
-	}
-	err = rw.Flush()
+	err = writeMessage(rw.Writer, &msg)
 	if err != nil {
 		return err
 	}

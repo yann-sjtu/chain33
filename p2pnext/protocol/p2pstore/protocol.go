@@ -1,13 +1,16 @@
 package p2pstore
 
 import (
+	"bufio"
+	"time"
+
+	"github.com/libp2p/go-libp2p-core/network"
+
 	"github.com/33cn/chain33/p2pnext/protocol"
 	types2 "github.com/33cn/chain33/p2pnext/types"
 	"github.com/33cn/chain33/queue"
 	"github.com/33cn/chain33/types"
-
 	"github.com/gogo/protobuf/proto"
-	core "github.com/libp2p/go-libp2p-core"
 )
 
 const (
@@ -42,30 +45,37 @@ func Init(env *protocol.P2PEnv) {
 }
 
 // Handle 处理节点之间的请求
-func (s *StoreProtocol) Handle(stream core.Stream) {
-
-	msg, err := readMessage(stream)
+func (s *StoreProtocol) Handle(stream network.Stream) {
+	// Create a buffer stream for non blocking read and write
+	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
+	var req types.P2PStoreRequest
+	err := readMessage(rw.Reader, &req)
 	if err != nil {
-		log.Error("handle", "unmarshal error", err)
-		_ = stream.Reset()
+		log.Error("handle", "read request error", err)
+		//_ = stream.Reset()
 		return
 	}
-
 	//具体业务处理逻辑
-	switch msg.ProtocolID {
+	switch t := req.Data.(type) {
 	//不同的协议交给不同的处理逻辑
-	case FetchChunk:
-		s.onFetchChunk(stream, msg.Params)
-	case StoreChunk:
-		s.onStoreChunk(stream, msg.Params)
-	case GetHeader:
-		s.onGetHeader(stream, msg.Params)
-	case GetChunkRecord:
-		s.onGetChunkRecord(stream, msg.Params)
+	case *types.P2PStoreRequest_ReqChunkBlockBody:
+		// *types.ReqChunkBlockBody -> *types.BlockBodys
+		s.onFetchChunk(rw.Writer, t.ReqChunkBlockBody)
+	case *types.P2PStoreRequest_ChunkInfo:
+		// *types.ChunkInfo -> none
+		s.Host.Peerstore().AddAddr(stream.Conn().RemotePeer(), stream.Conn().RemoteMultiaddr(), time.Hour)
+		s.onStoreChunk(stream.Conn().RemotePeer(), t.ChunkInfo)
+	case *types.P2PStoreRequest_ReqBlocks:
+		// *types.ReqBlocks -> *types.Headers
+		s.onGetHeader(rw.Writer, t.ReqBlocks)
+	case *types.P2PStoreRequest_ReqChunkRecords:
+		// *types.ReqChunkRecords -> *types.ChunkRecords
+		s.onGetChunkRecord(rw.Writer, t.ReqChunkRecords)
 	default:
-		log.Error("Handle", "error", types2.ErrProtocolNotSupport, "protocol", msg.ProtocolID)
+		log.Error("Handle", "error", types2.ErrProtocolNotSupport, "protocol", req.ProtocolID)
 	}
 	stream.Close()
+	//stream.Conn().Close()
 	//TODO 管理connection
 }
 
@@ -132,6 +142,7 @@ func (s *StoreProtocol) HandleEvent(m *queue.Message) {
 		blockBodys, err := s.GetChunk(req)
 		if err != nil {
 			log.Error("HandleEvent", "GetChunkBlockBody error", err)
+			m.ReplyErr("", err)
 			return
 		}
 		m.Reply(&queue.Message{Data: blockBodys})
