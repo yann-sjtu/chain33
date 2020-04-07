@@ -3,12 +3,12 @@ package p2pstore
 import (
 	"bufio"
 
-	"github.com/libp2p/go-libp2p-core/network"
-
+	"github.com/33cn/chain33/common/log/log15"
 	"github.com/33cn/chain33/p2pnext/protocol"
 	types2 "github.com/33cn/chain33/p2pnext/types"
 	"github.com/33cn/chain33/queue"
 	"github.com/33cn/chain33/types"
+	"github.com/libp2p/go-libp2p-core/network"
 )
 
 const (
@@ -17,6 +17,8 @@ const (
 	GetHeader      = "/chain33/headers/1.0.0"
 	GetChunkRecord = "/chain33/chunk-record/1.0.0"
 )
+
+var log = log15.New("module", "protocol.p2pstore")
 
 type StoreProtocol struct {
 	protocol.BaseProtocol //default协议实现
@@ -46,7 +48,7 @@ func Init(env *protocol.P2PEnv) {
 func (s *StoreProtocol) Handle(stream network.Stream) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Error("Handle", "error", r)
+			log.Error("handle stream", "panic error", r)
 			stream.Reset()
 		} else {
 			stream.Close()
@@ -59,10 +61,10 @@ func (s *StoreProtocol) Handle(stream network.Stream) {
 	err := readMessage(rw.Reader, &req)
 	if err != nil {
 		log.Error("handle", "read request error", err)
-		//_ = stream.Reset()
+		stream.Reset()
 		return
 	}
-	//具体业务处理逻辑
+	//distribute message to corresponding handler
 	switch t := req.Data.(type) {
 	//不同的协议交给不同的处理逻辑
 	case *types.P2PStoreRequest_ReqChunkBlockBody:
@@ -87,11 +89,11 @@ func (s *StoreProtocol) Handle(stream network.Stream) {
 func (s *StoreProtocol) HandleEvent(m *queue.Message) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Error("HandleEvent", "error", r)
+			log.Error("handle event", "panic error", r)
 		}
 	}()
 	switch m.Ty {
-	// 通知临近节点进行区块数据归档
+	// 检查本节点是否需要进行区块数据归档
 	case types.EventNotifyStoreChunk:
 		data := m.GetData().(*types.ChunkInfo)
 		err := s.StoreChunk(data)

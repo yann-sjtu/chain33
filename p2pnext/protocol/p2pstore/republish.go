@@ -39,7 +39,7 @@ func (s *StoreProtocol) republish() error {
 	return nil
 }
 
-// 通知最近的 *20* 个节点备份数据
+// 通知最近的 *BackUp* 个节点备份数据
 func (s *StoreProtocol) notifyStoreChunk(req *types.ChunkInfo) {
 	peers := s.Discovery.Routing().RoutingTable().NearestPeers(kb.ConvertKey(genChunkPath(req.ChunkHash)), Backup)
 	for _, pid := range peers {

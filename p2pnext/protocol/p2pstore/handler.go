@@ -6,10 +6,9 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/libp2p/go-libp2p-core/network"
-
 	types2 "github.com/33cn/chain33/p2pnext/types"
 	"github.com/33cn/chain33/types"
+	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	kb "github.com/libp2p/go-libp2p-kbucket"
 )
@@ -17,7 +16,7 @@ import (
 //StoreChunk handles notification of blockchain,
 // store chunk if this node is the nearest node in the local routing table.
 func (s *StoreProtocol) StoreChunk(req *types.ChunkInfo) error {
-	if req == nil {
+	if req == nil || req.Start > req.End || req.End-req.Start > types2.MaxChunkNum {
 		return types2.ErrInvalidParam
 	}
 

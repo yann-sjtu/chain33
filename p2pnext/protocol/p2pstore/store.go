@@ -6,22 +6,18 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/33cn/chain33/common/log/log15"
+	"github.com/opentracing/opentracing-go/log"
+
 	types2 "github.com/33cn/chain33/p2pnext/types"
 	"github.com/33cn/chain33/types"
-
 	"github.com/ipfs/go-datastore"
 )
 
 const (
 	LocalChunkInfoKey = "local-chunk-info"
 	ChunkNameSpace    = "chunk"
-)
-
-var (
-	log        = log15.New("module", "protocol.p2pstore")
-	AlphaValue = 3
-	Backup     = 20
+	AlphaValue        = 3
+	Backup            = 20
 )
 
 // 保存chunk到本地p2pStore，同时更新本地chunk列表
