@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"time"
 
 	types2 "github.com/33cn/chain33/p2pnext/types"
@@ -36,7 +35,6 @@ func (s *StoreProtocol) getHeadersFromPeer(param *types.ReqBlocks, pid peer.ID) 
 	}
 	defer stream.Close()
 	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
-	fmt.Println("getHeadersFromPeer", "local", stream.Conn().LocalPeer(), "remote", stream.Conn().RemotePeer(), "id", s.Host.ID())
 	msg := types.P2PStoreRequest{
 		ProtocolID: GetHeader,
 		Data: &types.P2PStoreRequest_ReqBlocks{
@@ -105,7 +103,6 @@ func (s *StoreProtocol) getChunkRecordsFromPeer(param *types.ReqChunkRecords, pi
 	return res.Result.(*types.P2PStoreResponse_ChunkRecords).ChunkRecords, nil
 }
 
-// fetchChunkOrNearerPeersAsync 返回 *types.ChunkBlockBody 或者 []peer.ID
 func (s *StoreProtocol) fetchChunkOrNearerPeersAsync(ctx context.Context, param *types.ReqChunkBlockBody, peers []peer.ID) (*types.BlockBodys, []peer.ID) {
 
 	responseCh := make(chan interface{}, AlphaValue)
@@ -137,11 +134,9 @@ func (s *StoreProtocol) fetchChunkOrNearerPeersAsync(ctx context.Context, param 
 		case *types.BlockBodys:
 			//查到了区块数据，直接返回
 			return t, nil
-		case []peer.AddrInfo:
+		case []peer.ID:
 			//没查到区块数据，返回了更近的节点信息
-			for _, addrInfo := range t {
-				peerList = append(peerList, addrInfo.ID)
-			}
+			return nil, t
 		}
 	}
 
@@ -153,7 +148,7 @@ func (s *StoreProtocol) fetchChunkOrNearerPeersAsync(ctx context.Context, param 
 	return nil, peerList
 }
 
-func (s *StoreProtocol) fetchChunkOrNearerPeers(ctx context.Context, params *types.ReqChunkBlockBody, pid peer.ID) (*types.BlockBodys, []peer.AddrInfo, error) {
+func (s *StoreProtocol) fetchChunkOrNearerPeers(ctx context.Context, params *types.ReqChunkBlockBody, pid peer.ID) (*types.BlockBodys, []peer.ID, error) {
 	childCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	stream, err := s.Host.NewStream(childCtx, pid, FetchChunk)
@@ -200,11 +195,13 @@ func (s *StoreProtocol) fetchChunkOrNearerPeers(ctx context.Context, params *typ
 		if err != nil {
 			log.Error("fetchChunkOrNearerPeers", "addrInfo error", err)
 		}
-		//如果对端节点返回了addrInfo，把节点信息加入到PeerStore
+		var peerList []peer.ID
+		//如果对端节点返回了addrInfo，把节点信息加入到PeerStore，并返回节点id
 		for _, addrInfo := range addrInfos {
 			s.Host.Peerstore().AddAddrs(addrInfo.ID, addrInfo.Addrs, time.Hour)
+			peerList = append(peerList, addrInfo.ID)
 		}
-		return nil, addrInfos, nil
+		return nil, peerList, nil
 	default:
 		if res.ErrorInfo != "" {
 			return nil, nil, errors.New(res.ErrorInfo)

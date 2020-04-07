@@ -9,7 +9,6 @@ import (
 	types2 "github.com/33cn/chain33/p2pnext/types"
 	"github.com/33cn/chain33/queue"
 	"github.com/33cn/chain33/types"
-	"github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -172,12 +171,12 @@ func (s *StoreProtocol) HandleEvent(m *queue.Message) {
 	}
 }
 
-// VerifyRequest  验证请求数据
-func (s *StoreProtocol) VerifyRequest(message proto.Message, messageComm *types.MessageComm) bool {
-	return true
-}
-
-// SignMessage 对消息签名
-func (s *StoreProtocol) SignProtoMessage(message proto.Message) ([]byte, error) {
-	return nil, nil
-}
+//// VerifyRequest  验证请求数据
+//func (s *StoreProtocol) VerifyRequest(message proto.Message, messageComm *types.MessageComm) bool {
+//	return true
+//}
+//
+//// SignMessage 对消息签名
+//func (s *StoreProtocol) SignProtoMessage(message proto.Message) ([]byte, error) {
+//	return nil, nil
+//}

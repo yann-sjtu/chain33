@@ -54,7 +54,7 @@ func (s *StoreProtocol) GetChunk(req *types.ReqChunkBlockBody) (*types.BlockBody
 		return nil, types2.ErrInvalidParam
 	}
 
-	//优先获取本地数据
+	//优先获取本地p2pStore数据
 	bodys, err := s.getChunkBlock(req.ChunkHash)
 	if err == nil {
 		if req.Filter {
