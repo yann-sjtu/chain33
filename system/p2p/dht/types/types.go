@@ -29,6 +29,7 @@ type P2PSubConfig struct {
 	DHTDataDriver    string `protobuf:"bytes,10,opt,name=DHTDataDriver" json:"DHTDataDriver,omitempty"`
 	DHTDataPath      string `protobuf:"bytes,11,opt,name=DHTDataPath" json:"DHTDataPath,omitempty"`
 	DHTDataCache     int32  `protobuf:"varint,12,opt,name=DHTDataCache" json:"DHTDataCache,omitempty"`
+
 	//中继传输主动建立连接，中继服务端可以选配
 	/*
 
@@ -42,9 +43,11 @@ type P2PSubConfig struct {
 		    if  b just config RelayHop,a->b,b->c
 			a.DialPeer(b,c) will success
 	*/
-	RelayActive bool `protobuf:"varint,10,opt,name=relay_Active" json:"relayActive,omitempty"`
+	RelayActive bool `protobuf:"varint,10,opt,name=relayActive" json:"relayActive,omitempty"`
 	//接受其他节点发过来的中继请求，中继服务端必须配置
-	RelayHop bool `protobuf:"varint,11,opt,name=relay_Hop" json:"relayHop,omitempty"`
+	RelayHop bool `protobuf:"varint,11,opt,name=relayHop" json:"relayHop,omitempty"`
 	//发现新的中继节点，中继客户端端必须配置
-	RelayDiscovery bool `protobuf:"varint,12,opt,name=relayDiscovery" json:"relay_Discovery,omitempty"`
+	RelayDiscovery bool `protobuf:"varint,12,opt,name=relayDiscovery" json:"relayDiscovery,omitempty"`
+
+	NoFindLANPeers bool `protobuf:"varint,13,opt,name=noFindLANPeers" json:"noFindLANPeers,omitempty"`
 }
