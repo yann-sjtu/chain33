@@ -14,6 +14,7 @@ import (
 	kb "github.com/libp2p/go-libp2p-kbucket"
 )
 
+// HandleStreamFetchChunk handles other peers fetching chunk.
 func (p *Protocol) HandleStreamFetchChunk(req *types.P2PRequest, stream network.Stream) {
 	var res types.P2PResponse
 	defer func() {
@@ -92,12 +93,10 @@ func (p *Protocol) HandleStreamFetchChunk(req *types.P2PRequest, stream network.
 	res.Response = &types.P2PResponse_AddrInfo{AddrInfo: addrInfosData}
 }
 
-// 对端节点通知本节点保存数据
-/*
-检查本节点p2pStore是否保存了数据，
-	1）若已保存则只更新时间即可
-	2）若未保存则从网络中请求chunk数据
-*/
+// HandleStreamStoreChunk handles other peers notifying this peer to store chunk.
+// 检查本节点p2pStore是否保存了数据
+//	1）若已保存则只更新时间即可
+//	2）若未保存则从网络中请求chunk数据
 func (p *Protocol) HandleStreamStoreChunk(req *types.P2PRequest, stream network.Stream) {
 	param := req.Request.(*types.P2PRequest_ChunkInfoMsg).ChunkInfoMsg
 	chunkHashHex := hex.EncodeToString(param.ChunkHash)
@@ -113,14 +112,12 @@ func (p *Protocol) HandleStreamStoreChunk(req *types.P2PRequest, stream network.
 	}
 
 	var bodys *types.BlockBodys
-	var err error
 	defer func() {
 		if bodys == nil {
 			log.Error("HandleStreamStoreChunk error", "chunkhash", hex.EncodeToString(param.ChunkHash), "start", param.Start)
 			return
 		}
-		err = p.addChunkBlock(param, bodys)
-		if err != nil {
+		if err := p.addChunkBlock(param, bodys); err != nil {
 			log.Error("onStoreChunk", "store block error", err)
 			return
 		}
@@ -128,32 +125,32 @@ func (p *Protocol) HandleStreamStoreChunk(req *types.P2PRequest, stream network.
 
 	//blockchain模块可能有数据，blockchain模块保存了最新的10000+2*chunk_len个区块
 	//如果请求的区块高度在 [lastHeight-10000-2*chunk_len, lastHeight] 之间，则到blockchain模块去请求区块，否则到网络中请求
-	lastHeader, _ := p.getLastHeaderFromBlockChain()
-	chunkLen := param.End - param.Start + 1
-	if lastHeader != nil && param.Start >= lastHeader.Height-10000-2*chunkLen && param.End <= lastHeader.Height {
-		bodys, err = p.getChunkFromBlockchain(param)
+	lastHeader, err := p.getLastHeaderFromBlockChain()
+	if err != nil {
+		log.Error("HandleStreamStoreChunk", "getLastHeaderFromBlockChain", err)
+		return
+	}
+	//chunkLen := param.End - param.Start + 1
+	//if lastHeader != nil && param.Start >= lastHeader.Height-10000-2*chunkLen && param.End <= lastHeader.Height {
+	//TODO 当前版本blockchain保存完整数据，优先从blockchain获取数据，下个版本增加start判断
+	if lastHeader != nil && param.End <= lastHeader.Height {
+		bodys, _ = p.getChunkFromBlockchain(param)
 		if bodys != nil {
 			return
 		}
-		log.Error("onStoreChunk", "getChunkFromBlockchain error", err)
 	}
 
 	//blockchain模块没有数据，从网络中搜索数据
-	bodys, err = p.mustFetchChunk(param)
+	bodys, _ = p.mustFetchChunk(param)
 	if bodys != nil {
 		return
 	}
-	log.Error("onStoreChunk", "get bodys from nearest peer error", err)
 
 	//网络中最近的节点群中没有查找到数据, 从发通知的对端节点上去查找数据
-	bodys, _, err = p.fetchChunkOrNearerPeers(context.Background(), param, stream.Conn().RemotePeer())
-	if bodys != nil {
-		return
-	}
-	log.Error("onStoreChunk", "get bodys from remote peer error", err)
-
+	bodys, _, _ = p.fetchChunkOrNearerPeers(context.Background(), param, stream.Conn().RemotePeer())
 }
 
+// HandleStreamGetHeader handles other peers fetching block header.
 func (p *Protocol) HandleStreamGetHeader(req *types.P2PRequest, res *types.P2PResponse, _ network.Stream) error {
 	param := req.Request.(*types.P2PRequest_ReqBlocks)
 	msg := p.QueueClient.NewMessage("blockchain", types.EventGetHeaders, param.ReqBlocks)
@@ -173,6 +170,7 @@ func (p *Protocol) HandleStreamGetHeader(req *types.P2PRequest, res *types.P2PRe
 	return types.ErrNotFound
 }
 
+// HandleStreamGetChunkRecord handles other peers fetching chunk record.
 func (p *Protocol) HandleStreamGetChunkRecord(req *types.P2PRequest, res *types.P2PResponse, _ network.Stream) error {
 	param := req.Request.(*types.P2PRequest_ReqChunkRecords).ReqChunkRecords
 	records, err := p.getChunkRecordFromBlockchain(param)
@@ -183,8 +181,9 @@ func (p *Protocol) HandleStreamGetChunkRecord(req *types.P2PRequest, res *types.
 	return nil
 }
 
-//HandleEventNotifyStoreChunk handles notification of blockchain,
-// store chunk if this node is the nearest *count* node in the local routing table.
+// HandleEventNotifyStoreChunk handles notification of blockchain,
+// store chunk and notify other peers to store if this node is the nearest *count* node in the local routing table.
+// But if this node is a full node, just store the chunk without checking distance and notifying other peers.
 func (p *Protocol) HandleEventNotifyStoreChunk(m *queue.Message) {
 	req := m.GetData().(*types.ChunkInfoMsg)
 	if p.SubConfig.IsFullNode {
@@ -209,6 +208,7 @@ func (p *Protocol) HandleEventNotifyStoreChunk(m *queue.Message) {
 	log.Info("StoreChunk", "local pid", p.Host.ID(), "chunk hash", hex.EncodeToString(req.ChunkHash))
 }
 
+// HandleEventGetChunkBlock handles fetching block messages from other module.
 func (p *Protocol) HandleEventGetChunkBlock(m *queue.Message) {
 	req := m.GetData().(*types.ChunkInfoMsg)
 	bodys, err := p.getChunk(req, true)
@@ -248,6 +248,7 @@ func (p *Protocol) HandleEventGetChunkBlock(m *queue.Message) {
 	}
 }
 
+// HandleEventGetChunkBlockBody handles fetching block body messages from other module.
 func (p *Protocol) HandleEventGetChunkBlockBody(m *queue.Message) {
 	req := m.GetData().(*types.ChunkInfoMsg)
 	blockBodys, err := p.getChunk(req, true)
@@ -259,6 +260,7 @@ func (p *Protocol) HandleEventGetChunkBlockBody(m *queue.Message) {
 	m.Reply(&queue.Message{Data: blockBodys})
 }
 
+// HandleEventGetChunkRecord handles fetching chunk record messages from other module.
 func (p *Protocol) HandleEventGetChunkRecord(m *queue.Message) {
 	req := m.GetData().(*types.ReqChunkRecords)
 	records := p.getChunkRecords(req)

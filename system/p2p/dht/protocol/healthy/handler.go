@@ -26,6 +26,7 @@ func init() {
 	protocol.RegisterProtocolInitializer(InitProtocol)
 }
 
+// InitProtocol initials healthy protocol.
 func InitProtocol(env *protocol.P2PEnv) {
 	p := Protocol{
 		P2PEnv:     env,
@@ -107,6 +108,7 @@ func (p *Protocol) HandleStreamIsHealthy(req *types.P2PRequest, res *types.P2PRe
 	return nil
 }
 
+// HandleStreamLastHeader 获取节点最新高度
 func (p *Protocol) HandleStreamLastHeader(_ *types.P2PRequest, res *types.P2PResponse, _ network.Stream) error {
 	header, err := p.getLastHeaderFromBlockChain()
 	if err != nil {

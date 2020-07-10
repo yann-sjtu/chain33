@@ -14,7 +14,6 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 )
 
-//getChunk gets chunk data from p2pStore or other peers.
 func (p *Protocol) getChunk(req *types.ChunkInfoMsg, queryRemote bool) (*types.BlockBodys, error) {
 	if req == nil {
 		return nil, types2.ErrInvalidParam

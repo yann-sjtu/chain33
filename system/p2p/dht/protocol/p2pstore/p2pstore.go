@@ -41,6 +41,7 @@ func init() {
 	protocol.RegisterProtocolInitializer(InitProtocol)
 }
 
+// InitProtocol ...
 func InitProtocol(env *protocol.P2PEnv) {
 	p := &Protocol{
 		P2PEnv:              env,
@@ -85,6 +86,7 @@ func InitProtocol(env *protocol.P2PEnv) {
 				p.localChunkInfoMutex.Lock()
 				log.Info("debugLocalChunk", "local chunk hash len", len(p.localChunkInfo))
 				p.localChunkInfoMutex.Unlock()
+				log.Info("debugHealthyPeers", "rt count", len(p.RoutingTable.RoutingTable().ListPeers()), "healthy count", len(p.healthyRoutingTable.ListPeers()))
 			case <-ticker2:
 				p.republish()
 			case <-ticker3:
