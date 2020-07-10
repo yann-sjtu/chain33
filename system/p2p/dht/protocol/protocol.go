@@ -11,6 +11,7 @@ import (
 	kbt "github.com/libp2p/go-libp2p-kbucket"
 )
 
+//protocols
 const (
 	//p2pstore protocols
 	FetchChunk     = "/chain33/fetch-chunk/" + types2.Version
@@ -36,6 +37,7 @@ type P2PEnv struct {
 	RoutingTable RoutingTabler
 }
 
+// RoutingTabler TODO: rewrite
 type RoutingTabler interface {
 	RoutingTable() *kbt.RoutingTable
 }

@@ -10,21 +10,16 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 )
 
-func (p *Protocol) startRepublish() {
-	for range time.Tick(types2.RefreshInterval) {
-		p.republish()
-	}
-}
-
 func (p *Protocol) republish() {
+	if p.SubConfig.IsFullNode {
+		return
+	}
 	m := make(map[string]LocalChunkInfo)
 	p.localChunkInfoMutex.RLock()
 	for k, v := range p.localChunkInfo {
 		m[k] = v
 	}
 	p.localChunkInfoMutex.RUnlock()
-	log.Info("republish", ">>>>>>>>>>>>>> record amount:", len(m))
-	log.Info("republish", "rt count", len(p.RoutingTable.RoutingTable().ListPeers()), "healthy count", len(p.healthyRoutingTable.ListPeers()))
 	for hash, info := range m {
 		if time.Since(info.Time) > types2.ExpiredTime {
 			if err := p.deleteChunkBlock(info.ChunkHash); err != nil {

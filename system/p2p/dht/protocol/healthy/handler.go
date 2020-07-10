@@ -26,6 +26,7 @@ func init() {
 	protocol.RegisterProtocolInitializer(InitProtocol)
 }
 
+// InitProtocol initials healthy protocol.
 func InitProtocol(env *protocol.P2PEnv) {
 	p := Protocol{
 		P2PEnv:     env,
@@ -35,19 +36,21 @@ func InitProtocol(env *protocol.P2PEnv) {
 	p.Host.SetStreamHandler(protocol.IsHealthy, protocol.HandlerWithRW(p.HandleStreamIsHealthy))
 	p.Host.SetStreamHandler(protocol.GetLastHeader, protocol.HandlerWithRW(p.HandleStreamLastHeader))
 
-	//保存一个全局变量备查，避免频繁到网络中请求
-	go p.startUpdateFallBehind()
+	//保存一个全局变量备查，避免频繁到网络中请求。
+	//全节点不参与分布式存储，因此不需要更新
+	if !p.SubConfig.IsFullNode {
+		go p.startUpdateFallBehind()
+	}
+
 }
 
 // HandleStreamIsSync 实时查询是否已同步完成
 func (p *Protocol) HandleStreamIsSync(_ *types.P2PRequest, res *types.P2PResponse, _ network.Stream) error {
 	peers := p.Host.Network().Peers()
-	if len(peers) > MaxQuery {
-		shuffle(peers)
-		peers = peers[:MaxQuery]
-	}
+	shuffle(peers)
 
 	maxHeight := int64(-1)
+	var count int
 	for _, pid := range peers {
 		header, err := p.getLastHeaderFromPeer(pid)
 		if err != nil {
@@ -56,6 +59,11 @@ func (p *Protocol) HandleStreamIsSync(_ *types.P2PRequest, res *types.P2PRespons
 		}
 		if header.Height > maxHeight {
 			maxHeight = header.Height
+		}
+		//最多访问50个节点，不包含请求失败的
+		count++
+		if count > MaxQuery {
+			break
 		}
 	}
 
@@ -100,6 +108,7 @@ func (p *Protocol) HandleStreamIsHealthy(req *types.P2PRequest, res *types.P2PRe
 	return nil
 }
 
+// HandleStreamLastHeader 获取节点最新高度
 func (p *Protocol) HandleStreamLastHeader(_ *types.P2PRequest, res *types.P2PResponse, _ network.Stream) error {
 	header, err := p.getLastHeaderFromBlockChain()
 	if err != nil {

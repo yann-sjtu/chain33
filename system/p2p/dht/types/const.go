@@ -28,9 +28,7 @@ var (
 	ErrWrongSignature     = errors.New("wrong signature")
 	ErrUnknown            = errors.New("unknown error")
 
-	//ExpiredTime          = time.Hour * 4
-	//RefreshInterval      = time.Hour * 1
-	ExpiredTime          = time.Minute * 30
-	RefreshInterval      = time.Minute * 10
+	ExpiredTime          = time.Minute * 120
+	RefreshInterval      = time.Minute * 30
 	CheckHealthyInterval = time.Minute * 5
 )

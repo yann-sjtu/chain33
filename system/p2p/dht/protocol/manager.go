@@ -7,16 +7,19 @@ import (
 )
 
 //TODO
+// Initializer is a initial function that all protocols should have.
 type Initializer func(env *P2PEnv)
 
 var (
 	protocolInitializerArray []Initializer
 )
 
+// RegisterProtocolInitializer regists the initializer to the manager.
 func RegisterProtocolInitializer(initializer Initializer) {
 	protocolInitializerArray = append(protocolInitializerArray, initializer)
 }
 
+// InitAllProtocol initials all protocols when starting P2P.
 func InitAllProtocol(env *P2PEnv) {
 	for _, initializer := range protocolInitializerArray {
 		initializer(env)
