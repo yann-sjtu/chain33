@@ -89,7 +89,7 @@ func InitProtocol(env *protocol.P2PEnv) {
 	go func() {
 		ticker1 := time.NewTicker(time.Minute)
 		ticker2 := time.NewTicker(types2.RefreshInterval)
-		ticker4 := time.NewTicker(time.Hour)
+		ticker4 := time.NewTicker(time.Hour / 12)
 
 		for {
 			select {
@@ -108,6 +108,9 @@ func InitProtocol(env *protocol.P2PEnv) {
 				p.debugFullNode()
 				log.Info("debug rt peers", "======== amount", p.RoutingTable.Size())
 				log.Info("debug shard healthy peers", "======== amount", p.ShardHealthyRoutingTable.Size())
+				for _, pid := range p.ShardHealthyRoutingTable.ListPeers() {
+					log.Info("debug shard peer info", "pid", pid)
+				}
 				log.Info("debug length", "notifying msg len", len(p.notifyingQueue))
 				log.Info("debug peers and conns", "peers len", len(p.Host.Network().Peers()), "conns len", len(p.Host.Network().Conns()))
 				//for _, conn := range p.Host.Network().Conns() {
