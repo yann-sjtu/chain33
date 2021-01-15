@@ -9,6 +9,7 @@ import (
 	"container/list"
 	"math/big"
 	"sync/atomic"
+	"time"
 
 	"github.com/33cn/chain33/client/api"
 	"github.com/33cn/chain33/common"
@@ -103,6 +104,10 @@ func (b *BlockChain) ProcessBlock(broadcast bool, block *types.BlockDetail, pid 
 
 //基本检测通过之后尝试将此block添加到主链上
 func (b *BlockChain) maybeAddBestChain(broadcast bool, block *types.BlockDetail, pid string, sequence int64) (*types.BlockDetail, bool, bool, error) {
+	beg := time.Now()
+	defer func() {
+		chainlog.Info("maybeAddBestChain", "time cost", time.Since(beg))
+	}()
 	b.chainLock.Lock()
 	defer b.chainLock.Unlock()
 
@@ -147,6 +152,10 @@ func (b *BlockChain) blockExists(hash []byte) bool {
 
 // 尝试接受此block
 func (b *BlockChain) maybeAcceptBlock(broadcast bool, block *types.BlockDetail, pid string, sequence int64) (*types.BlockDetail, bool, error) {
+	beg := time.Now()
+	defer func() {
+		chainlog.Info("maybeAcceptBlock", "time cost", time.Since(beg))
+	}()
 	// 首先判断本block的Parent block是否存在index中
 	prevHash := block.Block.GetParentHash()
 	prevNode := b.index.LookupNode(prevHash)
@@ -195,6 +204,10 @@ func (b *BlockChain) maybeAcceptBlock(broadcast bool, block *types.BlockDetail, 
 
 //将block添加到主链中
 func (b *BlockChain) connectBestChain(node *blockNode, block *types.BlockDetail) (*types.BlockDetail, bool, error) {
+	beg := time.Now()
+	defer func() {
+		chainlog.Info("connectBestChain", "time cost", time.Since(beg))
+	}()
 
 	enBestBlockCmp := b.client.GetConfig().GetModuleConfig().Consensus.EnableBestBlockCmp
 	parentHash := block.Block.GetParentHash()
@@ -267,6 +280,10 @@ func (b *BlockChain) connectBlock(node *blockNode, blockdetail *types.BlockDetai
 	if atomic.LoadInt32(&b.isclosed) == 1 {
 		return nil, types.ErrIsClosed
 	}
+	start := time.Now()
+	defer func() {
+		chainlog.Info("connectBlock", "time cost", time.Since(start))
+	}()
 
 	// Make sure it's extending the end of the best chain.
 	parentHash := blockdetail.Block.GetParentHash()
@@ -365,7 +382,7 @@ func (b *BlockChain) connectBlock(node *blockNode, blockdetail *types.BlockDetai
 		panic(err)
 	}
 	writeCost := types.Since(beg)
-	chainlog.Debug("ConnectBlock", "execLocal", txCost, "saveBlk", saveBlkCost, "cacheBlk", cacheCost, "writeBatch", writeCost)
+	chainlog.Info("ConnectBlock", "execLocal", txCost, "saveBlk", saveBlkCost, "cacheBlk", cacheCost, "writeBatch", writeCost)
 	chainlog.Debug("connectBlock info", "height", block.Height, "batchsync", sync, "hash", common.ToHex(blockdetail.Block.Hash(cfg)))
 
 	// 更新最新的高度和header
