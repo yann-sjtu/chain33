@@ -28,10 +28,30 @@ func init() {
 // NewPebbleDB new
 func NewPebbleDB(name string, dir string, cache int) (*PebbleDB, error) {
 	dbPath := path.Join(dir, name+".db")
-	db, err := pebble.Open(dbPath, &pebble.Options{
-		BytesPerSync: 4 << 20,
-		Levels:       []pebble.LevelOptions{{FilterPolicy: bloom.FilterPolicy(10)}},
-	})
+	opts := &pebble.Options{
+		L0StopWritesThreshold:       1000,
+		Levels:                      make([]pebble.LevelOptions, 7),
+		MaxConcurrentCompactions:    3,
+		MaxOpenFiles:                16384,
+		MemTableSize:                64 << 20,
+		MemTableStopWritesThreshold: 12,
+	}
+	for i := 0; i < len(opts.Levels); i++ {
+		l := &opts.Levels[i]
+		l.BlockSize = 32 << 10       // 32 KB
+		l.IndexBlockSize = 256 << 10 // 256 KB
+		l.FilterPolicy = bloom.FilterPolicy(10)
+		l.FilterType = pebble.TableFilter
+		if i > 0 {
+			l.TargetFileSize = opts.Levels[i-1].TargetFileSize * 2
+		}
+		l.EnsureDefaults()
+	}
+	opts.Levels[6].FilterPolicy = nil
+	opts.FlushSplitBytes = opts.Levels[0].TargetFileSize
+	opts.EnsureDefaults()
+
+	db, err := pebble.Open(dbPath, opts)
 	if err != nil {
 		return nil, err
 	}
