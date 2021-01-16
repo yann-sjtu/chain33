@@ -162,19 +162,20 @@ func (b *BlockChain) maybeAcceptBlock(broadcast bool, block *types.BlockDetail, 
 	}
 
 	//将此block存储到db中，方便后面blockchain重组时使用，加入到主链saveblock时通过hash重新覆盖即可
-	sync := true
-	if atomic.LoadInt32(&b.isbatchsync) == 0 {
-		sync = false
-	}
-
-	err := b.blockStore.dbMaybeStoreBlock(block, sync)
-	if err != nil {
-		if err == types.ErrDataBaseDamage {
-			chainlog.Error("dbMaybeStoreBlock newbatch.Write", "err", err)
-			go util.ReportErrEventToFront(chainlog, b.client, "blockchain", "wallet", types.ErrDataBaseDamage)
-		}
-		return nil, false, err
-	}
+	//sync := true
+	//if atomic.LoadInt32(&b.isbatchsync) == 0 {
+	//	sync = false
+	//}
+	//
+	//err := b.blockStore.dbMaybeStoreBlock(block, sync)
+	//if err != nil {
+	//	if err == types.ErrDataBaseDamage {
+	//		chainlog.Error("dbMaybeStoreBlock newbatch.Write", "err", err)
+	//		go util.ReportErrEventToFront(chainlog, b.client, "blockchain", "wallet", types.ErrDataBaseDamage)
+	//	}
+	//	return nil, false, err
+	//}
+	var err error
 	// 创建一个node并添加到内存中index
 	cfg := b.client.GetConfig()
 	newNode := newBlockNode(cfg, broadcast, block.Block, pid, sequence)
