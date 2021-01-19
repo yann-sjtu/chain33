@@ -183,6 +183,7 @@ const (
 	ssDBBackendStr        = "ssdb"
 	goPegasusDbBackendStr = "pegasus"
 	pebbleDBBackendStr    = "pebble"
+	rocksDBBackendStr     = "rocksdb"
 )
 
 type dbCreator func(name string, dir string, cache int) (DB, error)
