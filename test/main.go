@@ -49,7 +49,15 @@ func main() {
 	fmt.Println(it.Valid(), string(it.Key().Data()), string(it.Value().Data()))
 	//it.SeekToFirst()
 	//fmt.Println(it.Valid(), string(it.Key().Data()), string(it.Value().Data()))
-	it.SeekForPrev(kvs[4])
+	it.Seek([]byte("ccc"))
+	fmt.Println(it.Valid(), string(it.Key().Data()), string(it.Value().Data()))
+	it.Next()
+	if it.Valid() {
+		fmt.Println(it.Valid(), string(it.Key().Data()), string(it.Value().Data()))
+	} else {
+		fmt.Println("not valid")
+	}
+
 	fmt.Println(it.Valid())
 	//k, v := it.Key(), it.Value()
 	//fmt.Println("first:", string(k.Data()), v.Data(), it.Valid())
