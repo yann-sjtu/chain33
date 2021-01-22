@@ -2,13 +2,11 @@ package db
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"path"
 
 	"github.com/33cn/chain33/common/log/log15"
 	"github.com/33cn/chain33/types"
-	"github.com/tecbot/gorocksdb"
 )
 
 var rocksLog = log15.New("module", "db.rocksdb")
@@ -16,7 +14,7 @@ var rocksLog = log15.New("module", "db.rocksdb")
 // PebbleDB db
 type RocksDB struct {
 	BaseDB
-	db *gorocksdb.DB
+	db *cgoRocksdb
 }
 
 func init() {
@@ -33,27 +31,8 @@ func NewRocksDB(name string, dir string, cache int) (*RocksDB, error) {
 	if err != nil {
 		_ = os.MkdirAll(dbPath, os.ModePerm)
 	}
-	options := gorocksdb.NewDefaultOptions()
-	options.EnableStatistics()
-	options.SetMaxWriteBufferNumber(3)
-	options.SetMaxBackgroundCompactions(10)
-	options.SetHashSkipListRep(2000000, 4, 4)
 
-	blockBasedTableOptions := gorocksdb.NewDefaultBlockBasedTableOptions()
-	blockBasedTableOptions.SetBlockCache(gorocksdb.NewLRUCache(64 * 1024))
-	blockBasedTableOptions.SetFilterPolicy(gorocksdb.NewBloomFilter(10))
-	blockBasedTableOptions.SetBlockSizeDeviation(5)
-	blockBasedTableOptions.SetBlockRestartInterval(10)
-	blockBasedTableOptions.SetBlockCacheCompressed(gorocksdb.NewLRUCache(64 * 1024))
-	blockBasedTableOptions.SetCacheIndexAndFilterBlocks(true)
-	blockBasedTableOptions.SetIndexType(gorocksdb.KHashSearchIndexType)
-
-	options.SetBlockBasedTableFactory(blockBasedTableOptions)
-	options.SetPrefixExtractor(gorocksdb.NewFixedPrefixTransform(3))
-	options.SetAllowConcurrentMemtableWrites(false)
-	options.SetCreateIfMissing(true)
-
-	db, err := gorocksdb.OpenDb(options, dbPath)
+	db, err := cgoOpenRocksdb(dbPath)
 	if err != nil {
 		return nil, err
 	}
@@ -62,21 +41,12 @@ func NewRocksDB(name string, dir string, cache int) (*RocksDB, error) {
 
 //Get get
 func (db *RocksDB) Get(key []byte) ([]byte, error) {
-	res, err := db.db.Get(gorocksdb.NewDefaultReadOptions(), key)
-	if err != nil {
-		rocksLog.Error("Get", "error", err)
-		return nil, err
-	}
-	if !res.Exists() {
-		return nil, ErrNotFoundInDb
-	}
-	defer res.Free()
-	return cloneByte(res.Data()), nil
+	return db.db.get(key)
 }
 
 //Set set
 func (db *RocksDB) Set(key []byte, value []byte) error {
-	err := db.db.Put(gorocksdb.NewDefaultWriteOptions(), key, value)
+	err := db.db.set(key, value, false)
 	if err != nil {
 		rocksLog.Error("Set", "error", err)
 		return err
@@ -86,9 +56,7 @@ func (db *RocksDB) Set(key []byte, value []byte) error {
 
 //SetSync 同步set
 func (db *RocksDB) SetSync(key []byte, value []byte) error {
-	opts := gorocksdb.NewDefaultWriteOptions()
-	opts.SetSync(true)
-	err := db.db.Put(opts, key, value)
+	err := db.db.set(key, value, true)
 	if err != nil {
 		rocksLog.Error("SetSync", "error", err)
 		return err
@@ -98,7 +66,7 @@ func (db *RocksDB) SetSync(key []byte, value []byte) error {
 
 //Delete 删除
 func (db *RocksDB) Delete(key []byte) error {
-	err := db.db.Delete(gorocksdb.NewDefaultWriteOptions(), key)
+	err := db.db.delete(key, false)
 	if err != nil {
 		rocksLog.Error("Delete", "error", err)
 		return err
@@ -108,9 +76,7 @@ func (db *RocksDB) Delete(key []byte) error {
 
 //DeleteSync 同步删除
 func (db *RocksDB) DeleteSync(key []byte) error {
-	opts := gorocksdb.NewDefaultWriteOptions()
-	opts.SetSync(true)
-	err := db.db.Delete(opts, key)
+	err := db.db.delete(key, true)
 	if err != nil {
 		rocksLog.Error("DeleteSync", "error", err)
 		return err
@@ -119,13 +85,13 @@ func (db *RocksDB) DeleteSync(key []byte) error {
 }
 
 //DB db
-func (db *RocksDB) DB() *gorocksdb.DB {
+func (db *RocksDB) DB() *cgoRocksdb {
 	return db.db
 }
 
 //Close 关闭
 func (db *RocksDB) Close() {
-	db.db.Close()
+	db.db.close()
 }
 
 //Print 打印
@@ -142,72 +108,64 @@ func (db *RocksDB) Iterator(start []byte, end []byte, reverse bool) Iterator {
 	if bytes.Equal(end, types.EmptyValue) {
 		end = nil
 	}
-	opts := gorocksdb.NewDefaultReadOptions()
-	if len(end) != 0 {
-		fmt.Println("Iterator end:", string(end))
-		opts.SetIterateUpperBound(end)
-	}
 
-	it := db.db.NewIterator(opts)
+	it := db.db.newIter(end)
 
 	return &rocksIt{it, itBase{start, end, reverse}}
 }
 
 // CompactRange ...
 func (db *RocksDB) CompactRange(start, limit []byte) error {
-	db.db.CompactRange(gorocksdb.Range{
-		Start: start,
-		Limit: limit,
-	})
+	db.db.compactRange(start, limit)
 	return nil
 }
 
 type rocksIt struct {
-	*gorocksdb.Iterator
+	it *cgoRocksIter
 	itBase
 }
 
 //Rewind ...
 func (it *rocksIt) Rewind() bool {
 	if it.reverse {
-		it.Iterator.SeekToLast()
+		it.it.seekToLast()
 	} else if len(it.start) != 0 {
-		it.Iterator.Seek(it.start)
+		it.it.seek(it.start)
 	} else {
-		it.Iterator.SeekToFirst()
+		it.it.seekToFirst()
 	}
 	return it.Valid()
 }
 
 // Seek seek
 func (it *rocksIt) Seek(key []byte) bool {
-	it.Iterator.Seek(key)
+	it.it.seek(key)
 	return it.Valid()
 }
 
 //Next next
 func (it *rocksIt) Next() bool {
 	if it.reverse {
-		it.Iterator.Prev()
+		it.it.prev()
 	} else {
-		it.Iterator.Next()
+		it.it.next()
 	}
 	return it.Valid()
 }
 
 // Valid valid
 func (it *rocksIt) Valid() bool {
-	return it.Iterator.Valid() && it.checkKey(it.Key())
+	return it.it.valid() && it.checkKey(it.Key())
 }
 
 // Key key
 func (it *rocksIt) Key() []byte {
-	return it.Iterator.Key().Data()
+	return it.it.key()
 }
 
 // Value value
 func (it *rocksIt) Value() []byte {
-	return it.Iterator.Value().Data()
+	return it.it.value()
 }
 
 // ValueCopy copy
@@ -218,39 +176,35 @@ func (it *rocksIt) ValueCopy() []byte {
 
 // Error error
 func (it *rocksIt) Error() error {
-	return it.Iterator.Err()
+	return it.it.error()
 }
 
 //Close 关闭
 func (it *rocksIt) Close() {
-	it.Iterator.Close()
+	it.it.close()
 }
 
 type rocksBatch struct {
 	db    *RocksDB
-	batch *gorocksdb.WriteBatch
-	wop   *gorocksdb.WriteOptions
+	batch *cgoRocksWriteBatch
+	sync  bool
 	size  int
 	len   int
 }
 
 //NewBatch new
 func (db *RocksDB) NewBatch(sync bool) Batch {
-	opts := gorocksdb.NewDefaultWriteOptions()
-	opts.SetSync(sync)
 	batch := &rocksBatch{
 		db:    db,
-		batch: gorocksdb.NewWriteBatch(),
-		wop:   opts,
-		size:  0,
-		len:   0,
+		batch: db.db.newBatch(),
+		sync:  sync,
 	}
 	return batch
 }
 
 // Set batch set
 func (rb *rocksBatch) Set(key, value []byte) {
-	rb.batch.Put(key, value)
+	rb.batch.put(key, value)
 	rb.size += len(key)
 	rb.size += len(value)
 	rb.len += len(value)
@@ -258,14 +212,14 @@ func (rb *rocksBatch) Set(key, value []byte) {
 
 // Delete batch delete
 func (rb *rocksBatch) Delete(key []byte) {
-	rb.batch.Delete(key)
+	rb.batch.delete(key)
 	rb.size += len(key)
 	rb.len++
 }
 
 // Write batch write
 func (rb *rocksBatch) Write() error {
-	err := rb.db.db.Write(rb.wop, rb.batch)
+	err := rb.batch.write(rb.db.db, rb.sync)
 	if err != nil {
 		rocksLog.Error("Write", "error", err)
 		return err
@@ -285,12 +239,12 @@ func (rb *rocksBatch) ValueLen() int {
 
 // Reset resets the batch
 func (rb *rocksBatch) Reset() {
-	rb.batch.Clear()
+	rb.batch.clear()
 	rb.len = 0
 	rb.size = 0
 }
 
 // UpdateWriteSync ...
 func (rb *rocksBatch) UpdateWriteSync(sync bool) {
-	rb.wop.SetSync(sync)
+	rb.sync = sync
 }
