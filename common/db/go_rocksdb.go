@@ -108,9 +108,8 @@ func (db *RocksDB) Iterator(start []byte, end []byte, reverse bool) Iterator {
 	if bytes.Equal(end, types.EmptyValue) {
 		end = nil
 	}
-
 	it := db.db.newIter(end)
-
+	it.seek(start)
 	return &rocksIt{it, itBase{start, end, reverse}}
 }
 
@@ -165,7 +164,7 @@ func (it *rocksIt) Key() []byte {
 
 // Value value
 func (it *rocksIt) Value() []byte {
-	return it.it.value()
+	return cloneByte(it.it.value())
 }
 
 // ValueCopy copy
