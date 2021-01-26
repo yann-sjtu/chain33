@@ -80,7 +80,7 @@ func (db *cgoRocksdb) get(key []byte) ([]byte, error) {
 		defer C.rocksdb_free(unsafe.Pointer(cErr))
 		return nil, errors.New(C.GoString(cErr))
 	}
-	if int(cValLen) == 0 {
+	if cValue == nil {
 		return nil, ErrNotFoundInDb
 	}
 	defer C.rocksdb_free(unsafe.Pointer(cValue))
