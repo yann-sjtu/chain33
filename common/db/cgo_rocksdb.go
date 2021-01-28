@@ -1,12 +1,13 @@
 package db
 
 // #cgo CFLAGS: -I/home/yann/gomodule/rocksdb/include
-// #cgo LDFLAGS: -L/home/yann/gomodule/rocksdb -lrocksdb -lstdc++ -lm -lz -lbz2 -lsnappy -llz4 -lzstd -ldl
+// #cgo LDFLAGS: -L . -lrocksdb -lstdc++ -lm -lz -lbz2 -lsnappy -llz4 -lzstd -ldl
 // #include <stdlib.h>
 // #include "rocksdb/c.h"
 import "C"
 import (
 	"reflect"
+	"runtime"
 	"unsafe"
 
 	"github.com/syndtr/goleveldb/leveldb/errors"
@@ -24,6 +25,13 @@ type cgoRocksWriteBatch struct {
 	c *C.rocksdb_writebatch_t
 }
 
+var (
+	defaultReadOption  *C.rocksdb_readoptions_t
+	iterReadOption     *C.rocksdb_readoptions_t
+	defaultWriteOption *C.rocksdb_writeoptions_t
+	syncWriteOption    *C.rocksdb_writeoptions_t
+)
+
 func cgoOpenRocksdb(dbPath string) (*cgoRocksdb, error) {
 	var (
 		cErr  *C.char
@@ -32,6 +40,7 @@ func cgoOpenRocksdb(dbPath string) (*cgoRocksdb, error) {
 	defer C.free(unsafe.Pointer(cName))
 
 	opts := C.rocksdb_options_create()
+	defer C.rocksdb_options_destroy(opts)
 	C.rocksdb_options_set_create_if_missing(opts, C.uchar(1))
 	C.rocksdb_options_enable_statistics(opts)
 	// rocksdb_options_set_max_write_buffer_number sets the maximum number of write buffers
@@ -60,12 +69,27 @@ func cgoOpenRocksdb(dbPath string) (*cgoRocksdb, error) {
 	C.rocksdb_options_set_block_based_table_factory(opts, blockBasedTableOptions)
 
 	C.rocksdb_options_set_allow_concurrent_memtable_write(opts, C.uchar(0))
+	// By default, RocksDB uses only one background thread for flush and
+	// compaction. Calling this function will set it up such that total of
+	// `total_threads` is used. Good value for `total_threads` is the number of
+	// cores. You almost definitely want to call this function if your system is
+	// bottlenecked by RocksDB.
+	C.rocksdb_options_increase_parallelism(opts, C.int(runtime.NumCPU()))
+	// Default: 1000
+	C.rocksdb_options_set_max_open_files(opts, C.int(1<<15))
 
 	db := C.rocksdb_open(opts, cName, &cErr)
 	if cErr != nil {
 		defer C.rocksdb_free(unsafe.Pointer(cErr))
 		return nil, errors.New(C.GoString(cErr))
 	}
+
+	defaultReadOption = C.rocksdb_readoptions_create()
+	iterReadOption = C.rocksdb_readoptions_create()
+	defaultWriteOption = C.rocksdb_writeoptions_create()
+	syncWriteOption = C.rocksdb_writeoptions_create()
+	C.rocksdb_writeoptions_set_sync(syncWriteOption, C.uchar(1))
+
 	return &cgoRocksdb{c: db}, nil
 }
 
@@ -75,7 +99,7 @@ func (db *cgoRocksdb) get(key []byte) ([]byte, error) {
 		cValLen C.size_t
 		cKey    = byteToChar(key)
 	)
-	cValue := C.rocksdb_get(db.c, C.rocksdb_readoptions_create(), cKey, C.size_t(len(key)), &cValLen, &cErr)
+	cValue := C.rocksdb_get(db.c, defaultReadOption, cKey, C.size_t(len(key)), &cValLen, &cErr)
 	if cErr != nil {
 		defer C.rocksdb_free(unsafe.Pointer(cErr))
 		return nil, errors.New(C.GoString(cErr))
@@ -93,9 +117,9 @@ func (db *cgoRocksdb) set(key, value []byte, sync bool) error {
 		cKey   = byteToChar(key)
 		cValue = byteToChar(value)
 	)
-	opt := C.rocksdb_writeoptions_create()
+	opt := defaultWriteOption
 	if sync {
-		C.rocksdb_writeoptions_set_sync(opt, C.uchar(1))
+		opt = syncWriteOption
 	}
 	C.rocksdb_put(db.c, opt, cKey, C.size_t(len(key)), cValue, C.size_t(len(value)), &cErr)
 	if cErr != nil {
@@ -110,9 +134,9 @@ func (db *cgoRocksdb) delete(key []byte, sync bool) error {
 		cErr *C.char
 		cKey = byteToChar(key)
 	)
-	opt := C.rocksdb_writeoptions_create()
+	opt := defaultWriteOption
 	if sync {
-		C.rocksdb_writeoptions_set_sync(opt, C.uchar(1))
+		opt = syncWriteOption
 	}
 	C.rocksdb_delete(db.c, opt, cKey, C.size_t(len(key)), &cErr)
 	if cErr != nil {
@@ -130,15 +154,19 @@ func (db *cgoRocksdb) compactRange(start, limit []byte) {
 
 func (db *cgoRocksdb) close() {
 	C.rocksdb_close(db.c)
+	C.rocksdb_readoptions_destroy(defaultReadOption)
+	C.rocksdb_readoptions_destroy(iterReadOption)
+	C.rocksdb_writeoptions_destroy(defaultWriteOption)
+	C.rocksdb_writeoptions_destroy(syncWriteOption)
 }
 
 func (db *cgoRocksdb) newIter(upperBound []byte) *cgoRocksIter {
-	opt := C.rocksdb_readoptions_create()
-	if upperBound != nil {
-		cKey := byteToChar(upperBound)
-		cKeyLen := C.size_t(len(upperBound))
-		C.rocksdb_readoptions_set_iterate_upper_bound(opt, cKey, cKeyLen)
-	}
+	opt := iterReadOption
+
+	cKey := byteToChar(upperBound)
+	cKeyLen := C.size_t(len(upperBound))
+	C.rocksdb_readoptions_set_iterate_upper_bound(opt, cKey, cKeyLen)
+
 	it := C.rocksdb_create_iterator(db.c, opt)
 	return &cgoRocksIter{c: it}
 }
@@ -222,20 +250,26 @@ func (wb *cgoRocksWriteBatch) delete(key []byte) {
 
 func (wb *cgoRocksWriteBatch) write(db *cgoRocksdb, sync bool) error {
 	var cErr *C.char
-	opt := C.rocksdb_writeoptions_create()
+	opt := defaultWriteOption
 	if sync {
-		C.rocksdb_writeoptions_set_sync(opt, C.uchar(1))
+		opt = syncWriteOption
 	}
 	C.rocksdb_write(db.c, opt, wb.c, &cErr)
 	if cErr != nil {
 		defer C.rocksdb_free(unsafe.Pointer(cErr))
 		return errors.New(C.GoString(cErr))
 	}
+	wb.destroy()
 	return nil
 }
 
 func (wb *cgoRocksWriteBatch) clear() {
 	C.rocksdb_writebatch_clear(wb.c)
+}
+
+func (wb *cgoRocksWriteBatch) destroy() {
+	C.rocksdb_writebatch_destroy(wb.c)
+	wb.c = nil
 }
 
 // byteToChar converts a byte slice to a *C.char.

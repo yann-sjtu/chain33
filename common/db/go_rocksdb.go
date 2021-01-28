@@ -139,7 +139,7 @@ func (it *rocksIt) Rewind() bool {
 // Seek seek
 func (it *rocksIt) Seek(key []byte) bool {
 	it.it.seek(key)
-	return it.Valid()
+	return it.it.valid()
 }
 
 //Next next
@@ -149,7 +149,7 @@ func (it *rocksIt) Next() bool {
 	} else {
 		it.it.next()
 	}
-	return it.Valid()
+	return it.it.valid()
 }
 
 // Valid valid
@@ -164,7 +164,7 @@ func (it *rocksIt) Key() []byte {
 
 // Value value
 func (it *rocksIt) Value() []byte {
-	return cloneByte(it.it.value())
+	return it.it.value()
 }
 
 // ValueCopy copy
@@ -238,7 +238,10 @@ func (rb *rocksBatch) ValueLen() int {
 
 // Reset resets the batch
 func (rb *rocksBatch) Reset() {
-	rb.batch.clear()
+	if rb.batch.c != nil {
+		rb.batch.destroy()
+	}
+	rb.batch = rb.db.db.newBatch()
 	rb.len = 0
 	rb.size = 0
 }
