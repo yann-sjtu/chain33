@@ -663,6 +663,7 @@ func (chain *BlockChain) addChunkRecord(msg *queue.Message) {
 	for _, info := range req.Infos {
 		chain.chunkRecordTask.Done(info.ChunkNum)
 		chainlog.Debug("addChunkRecord", "chunkNum", info.ChunkNum, "chunkHash", common.ToHex(info.ChunkHash))
+		atomic.StoreInt64(&chunkNum, info.ChunkNum)
 	}
 }
 

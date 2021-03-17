@@ -1093,11 +1093,14 @@ func (chain *BlockChain) CheckBestChainProc(headers *types.Headers, pid string) 
 	}
 }
 
+var chunkNum int64 = -1
+
 // ChunkRecordSync 同步chunkrecord
 func (chain *BlockChain) ChunkRecordSync() {
 	curheight := chain.GetBlockHeight()
 	peerMaxBlkHeight := chain.GetPeerMaxBlkHeight()
-	recvChunk := chain.GetCurRecvChunkNum()
+	//recvChunk := chain.GetCurRecvChunkNum()
+	recvChunk := chunkNum
 
 	curShouldChunk, _, _ := chain.CalcChunkInfo(curheight)
 	targetChunk, _, _ := chain.CalcSafetyChunkInfo(peerMaxBlkHeight)
