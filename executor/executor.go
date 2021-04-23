@@ -7,7 +7,6 @@ package executor
 
 //store package store the world - state data
 import (
-	"fmt"
 	"runtime"
 	"strings"
 	"sync"
@@ -302,7 +301,7 @@ func (exec *Executor) procExecCheckTx(msg *queue.Message) {
 func GetStack() string {
 	var buf [4048]byte
 	n := runtime.Stack(buf[:], false)
-	return fmt.Sprintf("==> %s\n", string(buf[:n]))
+	return string(buf[:n])
 }
 
 func (exec *Executor) procExecTxList(msg *queue.Message) {
