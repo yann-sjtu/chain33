@@ -97,7 +97,7 @@ func InitProtocol(env *protocol.P2PEnv) {
 		}
 	}()
 	go func() {
-		ticker1 := time.NewTicker(time.Second * 5)
+		ticker1 := time.NewTicker(time.Second)
 		if p.ChainCfg.IsTestNet() {
 			ticker1 = time.NewTicker(time.Second)
 		}

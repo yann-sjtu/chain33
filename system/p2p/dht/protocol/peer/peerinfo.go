@@ -68,6 +68,7 @@ func (p *Protocol) refreshPeerInfo() {
 		return
 	}
 	defer atomic.StoreInt32(&p.refreshing, 0)
+	start := time.Now()
 	var wg sync.WaitGroup
 	for _, remoteID := range p.ConnManager.FetchConnPeers() {
 		if p.checkDone() {
@@ -93,6 +94,7 @@ func (p *Protocol) refreshPeerInfo() {
 	selfPeer := p.PeerInfoManager.Fetch(p.Host.ID())
 	p.PeerInfoManager.Refresh(selfPeer)
 	p.checkOutBound(selfPeer.GetHeader().GetHeight())
+	log.Info("refreshPeerInfo", "time cost", time.Since(start))
 }
 
 func (p *Protocol) checkOutBound(height int64) {
